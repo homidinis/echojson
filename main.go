@@ -3,13 +3,14 @@ package main
 //todo: update, delete
 import (
 	"database/sql"
+	"echojson/jwtTest"
+	_ "echojson/jwtTest"
+	"echojson/products"
+	"echojson/transactions"
+	"echojson/users"
 	"fmt"
-	"log"
 	"net/http"
-	"strconv"
-	"strings"
-
-	_ "echojson/auth"
+	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 	echojwt "github.com/labstack/echo-jwt"
@@ -19,14 +20,10 @@ import (
 )
 
 //	type UserFull struct {
-//		Username   string `json:"username"`
+//		Username   gstring `json:"username"`
 //		Password   string `json:"password"`
 //	}
-type jwtCustomClaims struct {
-	Name  string `json:"name"`
-	Admin bool   `json:"admin"`
-	jwt.RegisteredClaims
-}
+
 type User struct {
 	First_name string `json:"firstname"`
 	Username   string `json:"username"`
@@ -44,14 +41,70 @@ type Item struct {
 	Price       int    `json:"price"`
 }
 
+const (
+	refreshTokenCookieName = "refresh-token"
+	accessTokenCookieName  = "access-token"
+	jwtSecretKey           = "secret"
+	jwtRefreshSecretKey    = "secret"
+)
+
+func GetJWTSecret() string {
+	return jwtSecretKey
+}
+func GetJWTRefresh() string {
+	return jwtRefreshSecretKey
+}
+
+/*
+==========================
+
+# GENERATE ACCESS TOKEN
+
+===========================
+*/
+func GenerateAccessToken(user User) (string, error) {
+	return GenerateToken(user, []byte(GetJWTSecret()))
+}
+
+/*
+============================
+
+# GENERATE TOKEN
+
+==============================
+*/
+func GenerateToken(user User, secret []byte) (string, error) {
+
+	claims := &jwtTest.JwtCustomClaims{ //need to put the struct in a common file exportable by main AND Products or it will complaim
+		user.First_name,
+		true,
+		jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	tokenString, err := token.SignedString([]byte("secret"))
+	if err != nil {
+		return "", err
+	}
+
+	return tokenString, nil
+}
+
+func JWTErrorChecker(err error, c echo.Context) error {
+	return c.Redirect(http.StatusMovedPermanently, c.Echo().Reverse("login"))
+}
+
 func main() {
 	e := echo.New()
 
 	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
+	// e.Use(middleware.Recover())
 	config := echojwt.Config{ //configures "restricted" to restrict requests without an Authorization token
 		NewClaimsFunc: func(c echo.Context) jwt.Claims {
-			return new(jwtCustomClaims) //use custom claims jwtCustomClaims
+			return new(jwtTest.JwtCustomClaims) //use custom claims jwtCustomClaims
 		},
 		SigningKey: []byte("secret"),
 	}
@@ -59,11 +112,21 @@ func main() {
 	r := e.Group("/restricted") //anything that uses r is a group
 	r.Use(echojwt.WithConfig(config))
 	e.POST("/login", login)
-	e.GET("/showProducts", getProducts)
+	e.GET("/showProducts", products.GetProducts)
+	e.GET("/showUsers", users.GetUsers)
+	e.GET("/showTransactions", transactions.GetTransaction)
 	// /restricted/*
-	r.GET("/updateProducts", updateProducts)
-	r.POST("/addProducts", addProducts)
-	r.POST("/deleteProducts", deleteProducts)
+	r.POST("/updateUsers", users.UpdateUsers)
+	r.POST("/addUsers", users.AddUsers)
+	r.POST("/deleteUsers", users.DeleteUsers)
+
+	r.POST("/updateTransactions", transactions.UpdateTransaction)
+	r.POST("/addTransactions", transactions.AddTransaction)
+	r.POST("/deleteTransactions", transactions.DeleteTransaction)
+
+	r.GET("/updateProducts", products.UpdateProducts)
+	r.POST("/addProducts", products.AddProducts)
+	r.POST("/deleteProducts", products.DeleteProducts)
 
 	e.Logger.Fatal(e.Start(":9000"))
 
@@ -80,7 +143,10 @@ var container User
 
 func login(c echo.Context) error {
 	db, err := sql.Open("postgres", "host=localhost port=5433 user=postgres password=postgres dbname=mkp_demo sslmode=disable")
-
+	if err != nil {
+		fmt.Println("DB Connection error: ", err)
+		return err
+	}
 	var user User
 	if err := c.Bind(&user); err != nil {
 		fmt.Println("Bind error: ", err)
@@ -104,192 +170,22 @@ func login(c echo.Context) error {
 		fmt.Println("container password: ", container.Password)
 		return echo.ErrUnauthorized //get mad
 	}
-
-	err = auth.GenerateAccessToken(container.Username, c)
+	//convert container to User instance so it can be passed into generate access token (gen access token needs User struct for "user.First_name")
+	userInstance := User{
+		First_name: container.First_name,
+		Username:   container.Username,
+		Password:   container.Password,
+	}
+	token, err := GenerateAccessToken(userInstance)
 
 	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "Token is incorrect")
+		return echo.NewHTTPError(http.StatusUnauthorized, "Something happened with token generation")
 	}
+
 	res := Response{
 		Message: "OK, welcome " + container.First_name, //returns firstname
 		Status:  "OK",
-		Result:  t,
+		Result:  token,
 	}
 	return c.JSON(http.StatusOK, res)
-}
-
-/*
-=================================
-
-GET PRODUCTS (SELECT)
-
-==================================
-*/
-func getProducts(c echo.Context) error {
-	db, err := sql.Open("postgres", "host=localhost port=5433 user=postgres password=postgres dbname=mkp_demo sslmode=disable")
-	if err != nil {
-		log.Fatal(err)
-	}
-	statement, err := db.Prepare("SELECT * FROM products")
-	if err != nil {
-		fmt.Println(err)
-	}
-	rows, err := statement.Query()
-	if err != nil {
-		fmt.Println(err)
-	}
-	var products []Item
-	for rows.Next() {
-		var product Item
-		err := rows.Scan(&product.Name, &product.Description, &product.Price, &product.Product_id)
-		if err != nil {
-			fmt.Println(err)
-		}
-		products = append(products, product)
-	}
-	res := Response{
-		Message: "SUCCESS",
-		Status:  "SUCCESS",
-		Result:  products,
-	}
-	return c.JSON(http.StatusOK, res)
-}
-
-/*
-========================================
-
-# REPLACE SQL
-
-========================================
-*/
-func ReplaceSQL(old, searchPattern string) string {
-	tmpCount := strings.Count(old, searchPattern)
-	for m := 1; m <= tmpCount; m++ {
-		old = strings.Replace(old, searchPattern, "$"+strconv.Itoa(m), 1)
-	}
-	return old
-}
-
-/*========================================
-
-ADD PRODUCTS
-
-========================================*/
-
-func addProducts(c echo.Context) error {
-	db, err := sql.Open("postgres", "host=localhost port=5433 user=postgres password=postgres dbname=mkp_demo sslmode=disable")
-	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*jwtCustomClaims)
-	name := claims.Name //returns dummyuser instead of Dummy A?
-	var items []Item    // declare "user" as new User struct
-	if err := c.Bind(&items); err != nil {
-		fmt.Println("Bind Error:", err) //if err is nil, bind user
-		return err
-	}
-	vals := []interface{}{}
-	sqlStr := `INSERT INTO products (name, description, price) VALUES `
-
-	for _, row := range items { //index,name_of_
-		sqlStr += "(?, ?, ?),"
-		vals = append(vals, row.Name, row.Description, row.Price)
-	}
-	// trim the last ,
-	sqlStr = strings.TrimSuffix(sqlStr, ",")
-	// replacing ? with $n for postgres
-	sqlStr = ReplaceSQL(sqlStr, "?")
-	//prepare the statement
-	statement, _ := db.Prepare(sqlStr)
-
-	//format all vals at once
-	_, err = statement.Exec(vals...)
-	if err != nil {
-		fmt.Println("Bind Error:", err)
-		return err
-	}
-
-	response := Response{
-		Message: "SUCCESS added by " + name,
-		Status:  "SUCCESS",
-		Result:  items,
-	}
-
-	return c.JSON(http.StatusCreated, response)
-}
-
-/*
-================================
-
-# UPDATE PRODUCTS
-
-====================================
-*/
-func updateProducts(c echo.Context) error {
-	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*jwtCustomClaims)
-	name := claims.Name
-	db, err := sql.Open("postgres", "host=localhost port=5433 user=postgres password=postgres dbname=mkp_demo sslmode=disable")
-
-	var itemContainer Item // declare "user" as new User struct
-	if err := c.Bind(&itemContainer); err != nil {
-		fmt.Println("Bind Error:", err) //if err is nil, bind user
-		return err
-	}
-	statement, err := db.Prepare(`UPDATE public.products SET name=$1, description=$2, price=$3 WHERE product_id=$5 RETURNING product_id;`)
-	if err != nil {
-		fmt.Println("Prep Error:", err)
-		return err
-	}
-	var items Item
-	err = statement.QueryRow(&itemContainer.Name, &itemContainer.Description, &itemContainer.Price, &itemContainer.Product_id).Scan(&items.Product_id)
-	if err != nil {
-		fmt.Println("Exec Error:", err)
-		return err
-	}
-
-	response := Response{
-		Message: "SUCCESS updated by" + name,
-		Status:  "SUCCESS",
-		Result:  items,
-	}
-
-	return c.JSON(http.StatusCreated, response)
-}
-
-/*
-================================
-
-# DELETE PRODUCTS
-
-====================================
-*/
-func deleteProducts(c echo.Context) error {
-	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*jwtCustomClaims)
-	name := claims.Name
-	db, err := sql.Open("postgres", "host=localhost port=5433 user=postgres password=postgres dbname=mkp_demo sslmode=disable")
-
-	var itemContainer Item // declare "user" as new User struct
-	if err := c.Bind(&itemContainer); err != nil {
-		fmt.Println("Bind Error:", err) //if err is nil, bind user
-		return err
-	}
-	statement, err := db.Prepare(`UPDATE public.products SET name=$1, description=$2, price=$3 WHERE product_id=$5 RETURNING product_id;`)
-	if err != nil {
-		fmt.Println("Prep Error:", err)
-		return err
-	}
-	var items Item
-	err = statement.QueryRow(&itemContainer.Name, &itemContainer.Description, &itemContainer.Price, &itemContainer.Product_id).Scan(&items.Product_id)
-	if err != nil {
-		fmt.Println("Exec Error:", err)
-		return err
-	}
-
-	response := Response{
-		Message: "SUCCESS updated by" + name,
-		Status:  "SUCCESS",
-		Result:  items,
-	}
-
-	return c.JSON(http.StatusCreated, response)
 }

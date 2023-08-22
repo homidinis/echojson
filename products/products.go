@@ -146,7 +146,7 @@ func UpdateProducts(c echo.Context) error {
 		fmt.Println("Bind Error:", err) //if err is nil, bind user
 		return err
 	}
-	statement, err := db.Prepare(`UPDATE public.products SET name=$1, description=$2, price=$3 WHERE product_id=$5 RETURNING product_id;`)
+	statement, err := db.Prepare(`UPDATE public.products SET name=$1, description=$2, price=$3 WHERE product_id=$4 RETURNING product_id;`)
 	if err != nil {
 		fmt.Println("Prep Error:", err)
 		return err
@@ -161,7 +161,7 @@ func UpdateProducts(c echo.Context) error {
 	response := Response{
 		Message: "SUCCESS updated by" + name,
 		Status:  "SUCCESS",
-		Result:  items,
+		Result:  items.Product_id,
 	}
 
 	return c.JSON(http.StatusCreated, response)
@@ -185,13 +185,13 @@ func DeleteProducts(c echo.Context) error {
 		fmt.Println("Bind Error:", err) //if err is nil, bind user
 		return err
 	}
-	statement, err := db.Prepare(`UPDATE public.products SET name=$1, description=$2, price=$3 WHERE product_id=$5 RETURNING product_id;`)
+	statement, err := db.Prepare(`DELETE FROM products WHERE product_id=$1 RETURNING product_id;`)
 	if err != nil {
 		fmt.Println("Prep Error:", err)
 		return err
 	}
 	var items Item
-	err = statement.QueryRow(&itemContainer.Name, &itemContainer.Description, &itemContainer.Price, &itemContainer.Product_id).Scan(&items.Product_id)
+	err = statement.QueryRow(&itemContainer.Product_id).Scan(&items.Product_id)
 	if err != nil {
 		fmt.Println("Exec Error:", err)
 		return err
@@ -200,7 +200,7 @@ func DeleteProducts(c echo.Context) error {
 	response := Response{
 		Message: "SUCCESS deleted by" + name,
 		Status:  "SUCCESS",
-		Result:  items,
+		Result:  items.Product_id,
 	}
 
 	return c.JSON(http.StatusCreated, response)

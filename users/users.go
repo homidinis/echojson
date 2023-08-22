@@ -3,6 +3,7 @@ package users
 //todo: update, delete
 import (
 	"database/sql"
+	"echojson/jwtTest"
 
 	"fmt"
 	"log"
@@ -15,11 +16,6 @@ import (
 	_ "github.com/lib/pq"
 )
 
-type jwtCustomClaims struct {
-	Name  string `json:"name"`
-	Admin bool   `json:"admin"`
-	jwt.RegisteredClaims
-}
 type User struct {
 	ID         string `json:"id"`
 	Age        string `json:"age"`
@@ -103,7 +99,7 @@ ADD PRODUCTS
 func AddUsers(c echo.Context) error {
 	db, err := sql.Open("postgres", "host=localhost port=5433 user=postgres password=postgres dbname=mkp_demo sslmode=disable")
 	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*jwtCustomClaims)
+	claims := user.Claims.(*jwtTest.JwtCustomClaims)
 	name := claims.Name //returns dummyuser instead of Dummy A?
 	var users []User    // declare "user" as new User struct
 	if err := c.Bind(&users); err != nil {
@@ -149,7 +145,7 @@ func AddUsers(c echo.Context) error {
 */
 func UpdateUsers(c echo.Context) error {
 	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*jwtCustomClaims)
+	claims := user.Claims.(*jwtTest.JwtCustomClaims)
 	name := claims.Name
 	db, err := sql.Open("postgres", "host=localhost port=5433 user=postgres password=postgres dbname=mkp_demo sslmode=disable")
 
@@ -188,7 +184,7 @@ func UpdateUsers(c echo.Context) error {
 */
 func DeleteUsers(c echo.Context) error {
 	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*jwtCustomClaims)
+	claims := user.Claims.(*jwtTest.JwtCustomClaims)
 	name := claims.Name
 	db, err := sql.Open("postgres", "host=localhost port=5433 user=postgres password=postgres dbname=mkp_demo sslmode=disable")
 

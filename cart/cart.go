@@ -13,11 +13,6 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-type jwtCustomClaims struct {
-	Name  string `json:"name"`
-	Admin bool   `json:"admin"`
-	jwt.RegisteredClaims
-}
 type User struct {
 	First_name string `json:"firstname"`
 	Username   string `json:"username"`

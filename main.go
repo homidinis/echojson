@@ -4,7 +4,6 @@ package main
 import (
 	"database/sql"
 	"echojson/jwtTest"
-	_ "echojson/jwtTest"
 	"echojson/products"
 	"echojson/transactions"
 	"echojson/users"
@@ -41,62 +40,13 @@ type Item struct {
 	Price       int    `json:"price"`
 }
 
-const (
-	refreshTokenCookieName = "refresh-token"
-	accessTokenCookieName  = "access-token"
-	jwtSecretKey           = "secret"
-	jwtRefreshSecretKey    = "secret"
-)
-
-func GetJWTSecret() string {
-	return jwtSecretKey
-}
-func GetJWTRefresh() string {
-	return jwtRefreshSecretKey
-}
-
-/*
-==========================
-
-# GENERATE ACCESS TOKEN
-
-===========================
-*/
-func GenerateAccessToken(user User) (string, error) {
-	return GenerateToken(user, []byte(GetJWTSecret()))
-}
-
 /*
 ============================
 
-# GENERATE TOKEN
+# MAIN
 
-==============================
+=============================
 */
-func GenerateToken(user User, secret []byte) (string, error) {
-
-	claims := &jwtTest.JwtCustomClaims{ //need to put the struct in a common file exportable by main AND Products or it will complaim
-		user.First_name,
-		true,
-		jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	tokenString, err := token.SignedString([]byte("secret"))
-	if err != nil {
-		return "", err
-	}
-
-	return tokenString, nil
-}
-
-func JWTErrorChecker(err error, c echo.Context) error {
-	return c.Redirect(http.StatusMovedPermanently, c.Echo().Reverse("login"))
-}
-
 func main() {
 	e := echo.New()
 
@@ -116,20 +66,78 @@ func main() {
 	e.GET("/showUsers", users.GetUsers)
 	e.GET("/showTransactions", transactions.GetTransaction)
 	// /restricted/*
-	r.POST("/updateUsers", users.UpdateUsers)
-	r.POST("/addUsers", users.AddUsers)
-	r.POST("/deleteUsers", users.DeleteUsers)
-
-	r.POST("/updateTransactions", transactions.UpdateTransaction)
-	r.POST("/addTransactions", transactions.AddTransaction)
-	r.POST("/deleteTransactions", transactions.DeleteTransaction)
 
 	r.GET("/updateProducts", products.UpdateProducts)
 	r.POST("/addProducts", products.AddProducts)
-	r.POST("/deleteProducts", products.DeleteProducts)
+	r.DELETE("/deleteProducts", products.DeleteProducts)
+
+	r.POST("/updateUsers", users.UpdateUsers)
+	r.POST("/addUsers", users.AddUsers)
+	r.DELETE("/deleteUsers", users.DeleteUsers)
+
+	r.POST("/updateTransactions", transactions.UpdateTransaction)
+	r.POST("/addTransactions", transactions.AddTransaction)
+	r.DELETE("/deleteTransactions", transactions.DeleteTransaction)
 
 	e.Logger.Fatal(e.Start(":9000"))
 
+}
+
+/*
+==========================
+
+# GENERATE ACCESS TOKEN
+
+===========================
+*/
+
+const (
+	refreshTokenCookieName = "refresh-token"
+	accessTokenCookieName  = "access-token"
+	jwtSecretKey           = "secret"
+	jwtRefreshSecretKey    = "secret"
+)
+
+func GetJWTSecret() string {
+	return jwtSecretKey
+}
+func GetJWTRefresh() string {
+	return jwtRefreshSecretKey
+}
+
+func GenerateAccessToken(user User) (string, error) {
+	return GenerateToken(user, []byte(GetJWTSecret()))
+}
+
+/*
+============================
+
+# GENERATE TOKEN
+
+==============================
+*/
+func GenerateToken(user User, secret []byte) (string, error) {
+
+	claims := &jwtTest.JwtCustomClaims{ //need to put the struct in a common file exportable by main AND Products or it will complaim
+		Name:  user.First_name,
+		Admin: true,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	tokenString, err := token.SignedString([]byte("secret"))
+	if err != nil {
+		return "", err
+	}
+
+	return tokenString, nil
+}
+
+func JWTErrorChecker(err error, c echo.Context) error {
+	return c.Redirect(http.StatusMovedPermanently, c.Echo().Reverse("login"))
 }
 
 /*

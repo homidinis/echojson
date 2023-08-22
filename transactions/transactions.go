@@ -169,13 +169,13 @@ func UpdateTransaction(c echo.Context) error {
 		fmt.Println("Bind Error:", err) //if err is nil, bind user
 		return err
 	}
-	statement, err := db.Prepare(`UPDATE public.transaction_history SET id=$1, transaction_id=$2, product_id=$3, transaction_date=$4, user_id=$5, payment_method=$6, quantity=$7 WHERE id=$8; RETURNING id;`)
+	statement, err := db.Prepare(`UPDATE public.transaction_history SET transaction_id=$1, product_id=$2, transaction_date=$3, user_id=$4, payment_method=$5, quantity=$6 WHERE id=$7 RETURNING id;`)
 	if err != nil {
 		fmt.Println("Prep Error:", err)
 		return err
 	}
 	var transactions Transaction
-	err = statement.QueryRow().Scan(&transactions.ID)
+	err = statement.QueryRow(transaction.Transaction_id, transaction.Product_id, transaction.Transaction_date, transaction.User_id, transaction.Payment_method, transaction.Quantity, transaction.ID).Scan(&transactions.ID)
 	if err != nil {
 		fmt.Println("Exec Error:", err)
 		return err
@@ -184,7 +184,7 @@ func UpdateTransaction(c echo.Context) error {
 	response := Response{
 		Message: "SUCCESS updated by" + name,
 		Status:  "SUCCESS",
-		Result:  transactions,
+		Result:  statement,
 	}
 
 	return c.JSON(http.StatusCreated, response)
@@ -214,7 +214,7 @@ func DeleteTransaction(c echo.Context) error {
 		return err
 	}
 	var transactions Transaction
-	err = statement.QueryRow(&transContainer.ID).Scan(&transactions.Transaction_id)
+	err = statement.QueryRow(&transContainer.Transaction_id).Scan(&transactions.Transaction_id)
 	if err != nil {
 		fmt.Println("Exec Error:", err)
 		return err
@@ -223,7 +223,7 @@ func DeleteTransaction(c echo.Context) error {
 	response := Response{
 		Message: "SUCCESS updated by" + name,
 		Status:  "SUCCESS",
-		Result:  transactions,
+		Result:  statement,
 	}
 
 	return c.JSON(http.StatusCreated, response)

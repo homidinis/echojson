@@ -3,14 +3,42 @@ package controller
 import (
 	"echojson/db"
 	"echojson/models"
+	"echojson/utils"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/labstack/echo/v4"
 )
+
+/*
+==================================
+
+# LOGIN
+
+==================================
+*/
+var container models.User
+
+func GETLogin(username string) (containerArray []models.User, err error) { //declare as array of User struct
+	db := db.Conn()
+	//1. grabs username and password WHERE typed-username
+	//2. dumps username, password, firstname from database into container
+	//3. compare password in container to typed-password
+	//4. if no errors, generate token
+	statement, err := db.Prepare("SELECT username, password, first_name FROM users WHERE username=$1") //only select by Username
+	if err != nil {
+		fmt.Println("Prepare err in controller:", err)
+	}
+	var container models.User
+	err = statement.QueryRow(username).Scan(&container.Username, &container.Password, &container.First_name) //container = [user{Username,Password,Firstname}]; scan scans into each of them
+	if err != nil {
+		fmt.Println("Query err in controller:", err)
+	}
+	containerArray = append(containerArray, container)
+	return
+}
 
 /*
 =================================
@@ -19,46 +47,31 @@ GET PRODUCTS (SELECT)
 
 ==================================
 */
-func GetProducts(c echo.Context) error {
+func GetProducts(id int) (products []models.Item, err error) {
 	db := db.Conn()
-	statement, err := db.Prepare("SELECT * FROM products")
+
+	var data []interface{}
+	query := "SELECT name, description, price, product_id FROM products"
+
+	if id != 0 { //if id is not presented
+		query += " WHERE product_id=$1" //append "where" to query
+		data = append(data, id)         //then append the id arg to the data interface. in the case of there being a lot of arguments for a lot of WHERE conditions
+	}
+	fmt.Println(query)
+	rows, err := db.Query(query, data...) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
 	if err != nil {
 		fmt.Println(err)
 	}
-	rows, err := statement.Query()
-	if err != nil {
-		fmt.Println(err)
-	}
-	var products []models.Item
-	for rows.Next() {
+
+	for rows.Next() { //for every row result, run Scan then Append the result into the products struct
 		var product models.Item
 		err := rows.Scan(&product.Name, &product.Description, &product.Price, &product.Product_id)
 		if err != nil {
 			fmt.Println(err)
 		}
 		products = append(products, product)
-	}
-	res := models.Response{
-		Message: "SUCCESS",
-		Status:  "SUCCESS",
-		Result:  products,
-	}
-	return c.JSON(http.StatusOK, res)
-}
-
-/*
-========================================
-
-# REPLACE SQL
-
-========================================
-*/
-func ReplaceSQL(old, searchPattern string) string {
-	tmpCount := strings.Count(old, searchPattern)
-	for m := 1; m <= tmpCount; m++ {
-		old = strings.Replace(old, searchPattern, "$"+strconv.Itoa(m), 1)
-	}
-	return old
+	} //products already declared as return value, instead of old method returning c.JSON(products)
+	return
 }
 
 /*========================================
@@ -67,16 +80,15 @@ ADD PRODUCTS
 
 ========================================*/
 
-func AddProducts(c echo.Context) error {
+func AddProducts(items []models.Item) (err error) {
 	db := db.Conn()
-	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*models.JwtCustomClaims)
-	name := claims.Name     //returns dummyuser instead of Dummy A?
-	var items []models.Item // declare "user" as new User struct
-	if err := c.Bind(&items); err != nil {
-		fmt.Println("Bind Error:", err) //if err is nil, bind user
-		return err
-	}
+
+	//1. declare array of Item struct (items)
+	//2. bind items to json input
+	//3. declare vals as an array
+	//4. loop the items array, append into vals each Name, Description, price from items
+	//5. return null if OK, error if error
+
 	vals := []interface{}{}
 	sqlStr := `INSERT INTO products (name, description, price) VALUES `
 
@@ -87,29 +99,17 @@ func AddProducts(c echo.Context) error {
 	// trim the last ,
 	sqlStr = strings.TrimSuffix(sqlStr, ",")
 	// replacing ? with $n for postgres
-	sqlStr = ReplaceSQL(sqlStr, "?")
+	sqlStr = utils.ReplaceSQL(sqlStr, "?")
 	//prepare the statement
 	statement, _ := db.Prepare(sqlStr)
 
 	//format all vals at once
-	_, err := statement.Exec(vals...)
+	_, err = statement.Exec(vals...)
 	if err != nil {
 		fmt.Println("Exec Error:", err)
-		response := models.Response{
-			Message: "ERROR",
-			Status:  "ERROR",
-			Result:  err.Error(),
-		}
-		return c.JSON(http.StatusInternalServerError, response)
+		return
 	}
-
-	response := models.Response{
-		Message: "SUCCESS added by " + name,
-		Status:  "SUCCESS",
-		Result:  items,
-	}
-
-	return c.JSON(http.StatusCreated, response)
+	return
 }
 
 /*
@@ -119,40 +119,38 @@ func AddProducts(c echo.Context) error {
 
 ====================================
 */
-func UpdateProducts(c echo.Context) error {
-	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*models.JwtCustomClaims)
-	name := claims.Name
-	db := db.Conn()
-	var itemContainer models.Item // declare "user" as new User struct
-	if err := c.Bind(&itemContainer); err != nil {
-		fmt.Println("Bind Error:", err) //if err is nil, bind user
-		return err
-	}
+func UpdateProducts(itemContainer models.Item) (response models.Response) { //returns response
+	db := db.Conn() // declare "user" as new User struct
+
 	statement, err := db.Prepare(`UPDATE public.products SET name=$1, description=$2, price=$3 WHERE product_id=$4 RETURNING product_id;`)
 	if err != nil {
 		fmt.Println("Prep Error:", err)
-		return err
+		response = models.Response{
+			Message: "ERROR",
+			Status:  "ERROR",
+			Result:  err.Error(),
+		}
+		return response
 	}
 	var items models.Item
 	err = statement.QueryRow(&itemContainer.Name, &itemContainer.Description, &itemContainer.Price, &itemContainer.Product_id).Scan(&items.Product_id)
 	if err != nil {
 		fmt.Println("Exec Error:", err)
-		response := models.Response{
+		response = models.Response{
 			Message: "ERROR",
 			Status:  "ERROR",
 			Result:  err.Error(),
 		}
-		return c.JSON(http.StatusInternalServerError, response)
+		return response
 	}
 
-	response := models.Response{
-		Message: "SUCCESS updated by" + name,
+	response = models.Response{
+		Message: "SUCCESS updated by NIL",
 		Status:  "SUCCESS",
 		Result:  items.Product_id,
 	}
 
-	return c.JSON(http.StatusCreated, response)
+	return response
 }
 
 /*
@@ -264,7 +262,7 @@ func AddTransaction(c echo.Context) error {
 	// trim the last ,
 	sqlStr = strings.TrimSuffix(sqlStr, ",")
 	// replacing ? with $n for postgres
-	sqlStr = ReplaceSQL(sqlStr, "?")
+	sqlStr = utils.ReplaceSQL(sqlStr, "?")
 	//prepare the statement
 	statement, _ := db.Prepare(sqlStr)
 
@@ -431,7 +429,7 @@ func AddUsers(c echo.Context) error {
 	// trim the last ,
 	sqlStr = strings.TrimSuffix(sqlStr, ",")
 	// replacing ? with $n for postgres
-	sqlStr = ReplaceSQL(sqlStr, "?")
+	sqlStr = utils.ReplaceSQL(sqlStr, "?")
 	//prepare the statement
 	statement, _ := db.Prepare(sqlStr)
 

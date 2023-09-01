@@ -13,6 +13,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+//                                       usecase is where all the bind functions go (user input is handled here, along with any related errors)
+//													It passes arguments to functions defined in controller
+
 func Login(c echo.Context) error {
 	var users models.User // declare "user" as new User struct
 	if err := c.Bind(&users); err != nil {
@@ -53,6 +56,14 @@ func Login(c echo.Context) error {
 	return c.JSON(http.StatusOK, res)
 }
 
+/*===============================
+
+
+GET
+
+
+=================================*/
+
 func GETDataProducts(c echo.Context) error { //bisa pass value kesini?
 
 	var items models.Item // declare "user" as new User struct
@@ -80,9 +91,55 @@ func GETDataProducts(c echo.Context) error { //bisa pass value kesini?
 
 }
 
+func GETTransactions(c echo.Context) error {
+	var transactions models.Transaction
+	if err := c.Bind(&transactions); err != nil {
+		fmt.Println("Bind Error:", err) //if err is nil, bind user
+		return err
+	}
+	result, err := controller.GetTransaction(transactions.Transaction_id)
+	if err != nil {
+		response := models.Response{
+			Message: "ERROR",
+			Status:  "ERROR",
+			Result:  result,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
+	response := models.Response{
+		Message: "SUCCESS",
+		Status:  "SUCCESS",
+		Result:  result,
+		Errors:  err.Error(),
+	}
+	return c.JSON(http.StatusOK, response)
+}
+func GETUsers(c echo.Context) error {
+
+	var users models.User
+	if err := c.Bind(&users); err != nil {
+		fmt.Println("Bind Error:", err) //if err is nil, bind user
+		return err
+	}
+	result := models.Response{
+		Message: "SUCCESS",
+		Status:  "SUCCESS",
+		Result:  controller.GetUsers(users.ID),
+	}
+	return c.JSON(http.StatusOK, result)
+}
+
+/*===============================
+
+
+INSERT
+
+
+=================================*/
+
 func INSERTProducts(c echo.Context) error {
 	tokenStr, err := utils.ExtractToken(c)
-	//extract user from token
 	user, _ := utils.ExtractAccessClaims(tokenStr)
 	fmt.Println(tokenStr)
 	if err != nil {
@@ -96,25 +153,278 @@ func INSERTProducts(c echo.Context) error {
 		return err
 	}
 	//result is when we pass items into AddProducts
-	result := controller.AddProducts(items)
 	response := models.Response{
 		Message: "OK, added by " + user,
 		Status:  "OK",
-		Result:  result,
+		Result:  controller.AddProducts(items),
 	}
 
 	return c.JSON(http.StatusOK, response)
 
 }
 
+func INSERTTransactions(c echo.Context) error {
+	tokenStr, err := utils.ExtractToken(c)
+	if err != nil {
+		return err
+	}
+	user, _ := utils.ExtractAccessClaims(tokenStr)
+
+	var transactions []models.Transaction // declare "user" as new User struct
+
+	if err := c.Bind(&transactions); err != nil {
+		fmt.Println("Bind Error:", err) //if err is nil, bind user
+		response := models.Response{
+			Message: "ERROR in binding",
+			Status:  "ERROR in binding",
+			Result:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
+	result := models.Response{
+		Message: "SUCCESS",
+		Status:  "SUCCESS",
+		Result:  controller.AddTransaction(transactions, user),
+	}
+	return c.JSON(http.StatusOK, result)
+}
+func INSERTUsers(c echo.Context) error {
+	tokenStr, err := utils.ExtractToken(c)
+	if err != nil {
+		return err
+	}
+	user, _ := utils.ExtractAccessClaims(tokenStr)
+
+	var users []models.User // declare "user" as new User struct
+
+	if err := c.Bind(&users); err != nil {
+		fmt.Println("Bind Error:", err) //if err is nil, bind user
+		response := models.Response{
+			Message: "ERROR in binding",
+			Status:  "ERROR in binding",
+			Result:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
+	result, err := controller.AddUsers(users, user)
+	if err != nil {
+		response := models.Response{
+			Message: "ERROR",
+			Status:  "ERROR",
+			Result:  result,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
+	response := models.Response{
+		Message: "SUCCESS",
+		Status:  "SUCCESS",
+		Result:  result,
+		Errors:  err.Error(),
+	}
+	return c.JSON(http.StatusOK, response)
+}
+
+/*===============================
+
+
+UPDATE
+
+
+=================================*/
+
 func UPDATEProducts(c echo.Context) error {
+	tokenStr, err := utils.ExtractToken(c)
+	if err != nil {
+		return err
+	}
+	user, _ := utils.ExtractAccessClaims(tokenStr)
 	var itemContainer models.Item
 
 	if err := c.Bind(&itemContainer); err != nil {
 		fmt.Println("Bind Error:", err) //if err is nil, bind user
 		return err
 	}
+	result, err := controller.UpdateProducts(itemContainer, user)
+	if err != nil {
+		response := models.Response{
+			Message: "ERROR",
+			Status:  "ERROR",
+			Result:  result,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
+	response := models.Response{
+		Message: "SUCCESS",
+		Status:  "SUCCESS",
+		Result:  result,
+		Errors:  err.Error(),
+	}
+	return c.JSON(http.StatusOK, response)
+}
 
-	result := controller.UpdateProducts(itemContainer) //updateproducts takes itemContainer (models.Item struct) and outputs struct
+func UPDATETransactions(c echo.Context) error {
+	tokenStr, err := utils.ExtractToken(c)
+	if err != nil {
+		return err
+	}
+	user, _ := utils.ExtractAccessClaims(tokenStr)
+
+	var transaction models.Transaction // declare "transaction" as new Transaction struct, this is to contain the JSON input
+	if err := c.Bind(&transaction); err != nil {
+		fmt.Println("Bind Error:", err) //if err is nil, bind user
+		response := models.Response{
+			Message: "ERROR in binding",
+			Status:  "ERROR",
+			Result:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
+
+	result, err := controller.UpdateTransaction(transaction, user)
+	if err != nil {
+		//TODO HANDLE ERROR
+	}
 	return c.JSON(http.StatusOK, result)
+}
+
+func UPDATEUsers(c echo.Context) error {
+	tokenStr, err := utils.ExtractToken(c)
+	if err != nil {
+		return err
+	}
+	user, _ := utils.ExtractAccessClaims(tokenStr)
+
+	var userContainer models.User // declare "users" as new User struct for binding
+	if err := c.Bind(&userContainer); err != nil {
+		fmt.Println("Bind Error:", err) //if err is nil, bind user
+		return err
+	}
+	result, err := controller.UpdateUsers(userContainer, user)
+	if err != nil {
+		fmt.Println("Exec Error:", err)
+		response := models.Response{
+			Message: "ERROR",
+			Status:  "ERROR",
+			Result:  result,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
+	response := models.Response{
+		Message: "SUCCESS",
+		Status:  "SUCCESS",
+		Result:  result,
+		Errors:  err.Error(),
+	}
+	return c.JSON(http.StatusOK, response)
+}
+
+/*===============================
+
+
+DELETE
+
+
+=================================*/
+
+func DELETEProducts(c echo.Context) error { //wrapper for DeleteProducts
+	//extract user frm tokens
+	tokenStr, err := utils.ExtractToken(c)
+	if err != nil {
+		return err
+	}
+	user, _ := utils.ExtractAccessClaims(tokenStr)
+	//container for the json request
+	var itemContainer models.Item
+	if err := c.Bind(&itemContainer); err != nil {
+		fmt.Println("Bind Error:", err) //if err is nil, bind user. if err is not nil, print out the response struct
+		response := models.Response{
+			Message: "ERROR in binding",
+			Status:  "ERROR in binding",
+			Result:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
+	result, err := controller.DeleteProducts(itemContainer, user)
+	if err != nil {
+		response := models.Response{
+			Message: "ERROR",
+			Status:  "ERROR",
+			Result:  result,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
+	response := models.Response{
+		Message: "SUCCESS",
+		Status:  "SUCCESS",
+		Result:  result,
+		Errors:  err.Error(),
+	}
+	return c.JSON(http.StatusOK, response) //outputs a response struct
+}
+
+func DELETETransactions(c echo.Context) error {
+	tokenStr, err := utils.ExtractToken(c)
+	if err != nil {
+		return err
+	}
+	user, _ := utils.ExtractAccessClaims(tokenStr)
+
+	var transContainer models.Transaction // declare "user" as new User struct
+	if err := c.Bind(&transContainer); err != nil {
+		fmt.Println("Bind Error:", err) //if err is nil, bind user
+		return err
+	}
+	result, err := controller.DeleteTransaction(transContainer, user)
+	if err != nil {
+		response := models.Response{
+			Message: "ERROR",
+			Status:  "ERROR",
+			Result:  result,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
+	response := models.Response{
+		Message: "SUCCESS",
+		Status:  "SUCCESS",
+		Result:  result,
+		Errors:  err.Error(),
+	}
+
+	return c.JSON(http.StatusOK, response)
+}
+
+func DELETEUsers(c echo.Context) error {
+	tokenStr, err := utils.ExtractToken(c)
+	if err != nil {
+		return err
+	}
+	user, _ := utils.ExtractAccessClaims(tokenStr)
+
+	var userContainer models.User
+	if err := c.Bind(&userContainer); err != nil {
+		fmt.Println("Bind Error:", err)
+	}
+
+	result, err := controller.DeleteUsers(userContainer, user)
+	if err != nil {
+		response := models.Response{
+			Message: "ERROR",
+			Status:  "ERROR",
+			Result:  result,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
+	response := models.Response{
+		Message: "SUCCESS",
+		Status:  "SUCCESS",
+		Result:  result,
+		Errors:  err.Error(),
+	}
+	return c.JSON(http.StatusOK, response)
 }

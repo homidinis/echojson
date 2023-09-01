@@ -5,11 +5,7 @@ import (
 	"echojson/models"
 	"echojson/utils"
 	"fmt"
-	"net/http"
 	"strings"
-
-	"github.com/golang-jwt/jwt/v4"
-	"github.com/labstack/echo/v4"
 )
 
 /*
@@ -74,6 +70,73 @@ func GetProducts(id int) (products []models.Item, err error) {
 	return
 }
 
+/*
+=================================
+
+GET TRANSACTION (SELECT)
+
+==================================
+*/
+func GetTransaction(id string) (transactions []models.Transaction, err error) {
+	db := db.Conn()
+
+	var data []interface{}
+	query := "SELECT id, transaction_id, product_id, transaction_date, payment_method, quantity, user_id FROM public.transaction_history"
+
+	if id != "" { //if id is not presented
+		query += "WHERE transaction_id=$1" //append "where" to query
+		data = append(data, id)            //then append the id arg to the data interface. in the case of there being a lot of arguments for a lot of WHERE conditions
+	}
+
+	fmt.Println(query)
+	rows, err := db.Query(query, data...) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
+	if err != nil {
+		fmt.Println(err)
+	}
+	var transaction models.Transaction
+	for rows.Next() { //for every row result, run Scan then Append the result into the products struct
+		err := rows.Scan(&transaction.ID, &transaction.Transaction_id, &transaction.Payment_method, &transaction.Product_id, &transaction.Transaction_date, &transaction.Quantity, &transaction.User_id)
+		if err != nil {
+			fmt.Println(err)
+		}
+		transactions = append(transactions, transaction)
+	} //products already declared as return value, instead of old method returning c.JSON(products)
+	return
+}
+
+/*
+=================================
+
+GET USERS (SELECT)
+todo: add "if id=0"
+==================================
+*/
+func GetUsers(id int) (userContainer []models.User) { //return userContainer, yang map ke response di usecase
+	db := db.Conn()
+	query := `SELECT id, age, first_name, last_name, email, username, "group" FROM public.users`
+	var data []interface{}
+
+	if id != 0 { //if id is not presented
+		query += "WHERE id=$1"  //append "where" to query
+		data = append(data, id) //then append the id arg to the data interface. in the case of there being a lot of arguments for a lot of WHERE conditions
+	}
+
+	fmt.Println("query: " + query)
+	rows, err := db.Query(query, data...) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
+	if err != nil {
+		fmt.Println(err)
+	}
+	for rows.Next() {
+		var users models.User
+		err := rows.Scan(&users.ID, &users.Age, &users.First_name, &users.Last_name, &users.Email, &users.Username, &users.Group)
+		if err != nil {
+			fmt.Println(err)
+		}
+		userContainer = append(userContainer, users)
+	}
+	return
+}
+
 /*========================================
 
 ADD PRODUCTS
@@ -112,146 +175,14 @@ func AddProducts(items []models.Item) (err error) {
 	return
 }
 
-/*
-================================
-
-# UPDATE PRODUCTS
-
-====================================
-*/
-func UpdateProducts(itemContainer models.Item) (response models.Response) { //returns response
-	db := db.Conn() // declare "user" as new User struct
-
-	statement, err := db.Prepare(`UPDATE public.products SET name=$1, description=$2, price=$3 WHERE product_id=$4 RETURNING product_id;`)
-	if err != nil {
-		fmt.Println("Prep Error:", err)
-		response = models.Response{
-			Message: "ERROR",
-			Status:  "ERROR",
-			Result:  err.Error(),
-		}
-		return response
-	}
-	var items models.Item
-	err = statement.QueryRow(&itemContainer.Name, &itemContainer.Description, &itemContainer.Price, &itemContainer.Product_id).Scan(&items.Product_id)
-	if err != nil {
-		fmt.Println("Exec Error:", err)
-		response = models.Response{
-			Message: "ERROR",
-			Status:  "ERROR",
-			Result:  err.Error(),
-		}
-		return response
-	}
-
-	response = models.Response{
-		Message: "SUCCESS updated by NIL",
-		Status:  "SUCCESS",
-		Result:  items.Product_id,
-	}
-
-	return response
-}
-
-/*
-================================
-
-# DELETE PRODUCTS
-
-====================================
-*/
-func DeleteProducts(c echo.Context) error {
-	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*models.JwtCustomClaims)
-	name := claims.Name
-	db := db.Conn()
-	var itemContainer models.Item // declare "user" as new User struct
-	if err := c.Bind(&itemContainer); err != nil {
-		fmt.Println("Bind Error:", err) //if err is nil, bind user. if err is not nil, print out the response struct
-		response := models.Response{
-			Message: "ERROR",
-			Status:  "ERROR",
-			Result:  err.Error(),
-		}
-		return c.JSON(http.StatusInternalServerError, response)
-	}
-	statement, err := db.Prepare(`DELETE FROM products WHERE product_id=$1 RETURNING product_id;`)
-	if err != nil {
-		fmt.Println("Prep Error:", err)
-		return err
-	}
-	var items models.Item
-	err = statement.QueryRow(&itemContainer.Product_id).Scan(&items.Product_id)
-	if err != nil {
-		fmt.Println("Exec Error:", err)
-		response := models.Response{
-			Message: "ERROR",
-			Status:  "ERROR",
-			Result:  err.Error(),
-		}
-		return c.JSON(http.StatusInternalServerError, response)
-	}
-
-	response := models.Response{
-		Message: "SUCCESS deleted by" + name,
-		Status:  "SUCCESS",
-		Result:  items.Product_id,
-	}
-
-	return c.JSON(http.StatusCreated, response)
-}
-
-/*
-=================================
-
-GET TRANSACTION (SELECT)
-
-==================================
-*/
-func GetTransaction(c echo.Context) error {
-	db := db.Conn()
-	statement, err := db.Prepare(`SELECT id, transaction_id, product_id, transaction_date, user_id, payment_method, quantity FROM public.transaction_history;`)
-	if err != nil {
-		fmt.Println(err)
-	}
-	rows, err := statement.Query()
-	if err != nil {
-		fmt.Println(err)
-	}
-	var trsContainer []models.Transaction
-
-	for rows.Next() {
-		var trans models.Transaction
-		err := rows.Scan(&trans.ID, &trans.Transaction_id, &trans.Product_id, &trans.Transaction_date, &trans.User_id, &trans.Payment_method, &trans.Quantity)
-		if err != nil {
-			fmt.Println(err)
-		}
-		trsContainer = append(trsContainer, trans)
-	}
-	res := models.Response{
-		Message: "SUCCESS",
-		Status:  "SUCCESS",
-		Result:  trsContainer,
-	}
-	return c.JSON(http.StatusOK, res)
-}
-
 /*========================================
 
 ADD TRANSACTION
 
 ========================================*/
 
-func AddTransaction(c echo.Context) error {
+func AddTransaction(transactions []models.Transaction, user string) (err error) {
 	db := db.Conn()
-	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*models.JwtCustomClaims)
-	name := claims.Name                   //returns dummyuser instead of Dummy A?
-	var transactions []models.Transaction // declare "user" as new User struct
-	if err := c.Bind(&transactions); err != nil {
-		fmt.Println("Bind Error:", err) //if err is nil, bind user
-		return err
-	}
 	vals := []interface{}{}
 	sqlStr := `INSERT INTO public.transaction_history(transaction_id, product_id, transaction_date, user_id, payment_method, quantity) VALUES`
 
@@ -267,135 +198,12 @@ func AddTransaction(c echo.Context) error {
 	statement, _ := db.Prepare(sqlStr)
 
 	//format all vals at once
-	_, err := statement.Exec(vals...)
+	_, err = statement.Exec(vals...)
 	if err != nil {
-		fmt.Println("Bind Error:", err)
-		return err
+		fmt.Println("QUERY ERROR:", err)
+		return
 	}
-
-	response := models.Response{
-		Message: "SUCCESS added by " + name,
-		Status:  "SUCCESS",
-		Result:  vals,
-	}
-
-	return c.JSON(http.StatusCreated, response)
-}
-
-/*
-================================
-
-# UPDATE TRANSACTION
-
-====================================
-*/
-func UpdateTransaction(c echo.Context) error {
-	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*models.JwtCustomClaims)
-	name := claims.Name
-	db := db.Conn()
-	var transaction models.Transaction // declare "transaction" as new Transaction struct
-	if err := c.Bind(&transaction); err != nil {
-		fmt.Println("Bind Error:", err) //if err is nil, bind user
-		return err
-	}
-	statement, err := db.Prepare(`UPDATE 
-	public.transaction_history 
-	SET 
-	transaction_id=$1, product_id=$2, transaction_date=$3, user_id=$4, payment_method=$5, 
-	quantity=$6 
-	WHERE id=$7 RETURNING id;`)
-	if err != nil {
-		fmt.Println("Prep Error:", err)
-		return err
-	}
-	var transactions models.Transaction
-	err = statement.QueryRow(transaction.Transaction_id, transaction.Product_id, transaction.Transaction_date, transaction.User_id, transaction.Payment_method, transaction.Quantity, transaction.ID).Scan(&transactions.ID)
-	if err != nil {
-		fmt.Println("Exec Error:", err)
-		return err
-	}
-
-	response := models.Response{
-		Message: "SUCCESS updated by" + name,
-		Status:  "SUCCESS",
-		Result:  statement,
-	}
-
-	return c.JSON(http.StatusCreated, response)
-}
-
-/*
-================================
-
-# DELETE TRANSACTION
-
-====================================
-*/
-func DeleteTransaction(c echo.Context) error {
-	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*models.JwtCustomClaims)
-	name := claims.Name
-	db := db.Conn()
-	var transContainer models.Transaction // declare "user" as new User struct
-	if err := c.Bind(&transContainer); err != nil {
-		fmt.Println("Bind Error:", err) //if err is nil, bind user
-		return err
-	}
-	statement, err := db.Prepare(`DELETE FROM public.transaction_history WHERE transaction_id=$1 RETURNING transaction_id`)
-	if err != nil {
-		fmt.Println("Prep Error:", err)
-		return err
-	}
-	var transactions models.Transaction
-	err = statement.QueryRow(&transContainer.Transaction_id).Scan(&transactions.Transaction_id)
-	if err != nil {
-		fmt.Println("Exec Error:", err)
-		return err
-	}
-
-	response := models.Response{
-		Message: "SUCCESS updated by" + name,
-		Status:  "SUCCESS",
-		Result:  statement,
-	}
-
-	return c.JSON(http.StatusCreated, response)
-}
-
-/*
-=================================
-
-GET USERS (SELECT)
-
-==================================
-*/
-func GetUsers(c echo.Context) error {
-	db := db.Conn()
-
-	statement, err := db.Prepare(`SELECT id, age, first_name, last_name, email, username, "group" FROM public.users;`)
-	if err != nil {
-		fmt.Println(err)
-	}
-	rows, err := statement.Query()
-	if err != nil {
-		fmt.Println(err)
-	}
-	var userContainer []models.User
-	for rows.Next() {
-		var users models.User
-		err := rows.Scan(&users.ID, &users.Age, &users.First_name, &users.Last_name, &users.Email, &users.Username, &users.Group)
-		if err != nil {
-			fmt.Println(err)
-		}
-		userContainer = append(userContainer, users)
-	}
-	res := models.Response{
-		Message: "SUCCESS",
-		Status:  "SUCCESS",
-		Result:  userContainer,
-	}
-	return c.JSON(http.StatusOK, res)
+	return
 }
 
 /*========================================
@@ -404,22 +212,8 @@ ADD users
 
 ========================================*/
 
-func AddUsers(c echo.Context) error {
+func AddUsers(users []models.User, user string) (vals []interface{}, err error) {
 	db := db.Conn()
-	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*models.JwtCustomClaims)
-	name := claims.Name     //returns dummyuser instead of Dummy A?
-	var users []models.User // declare "user" as new User struct
-	if err := c.Bind(&users); err != nil {
-		fmt.Println("Bind Error:", err) //if err is nil, bind user
-		response := models.Response{
-			Message: "ERROR",
-			Status:  "ERROR",
-			Result:  err.Error(),
-		}
-		return c.JSON(http.StatusInternalServerError, response)
-	}
-	vals := []interface{}{}
 	sqlStr := `INSERT INTO public.users(age, first_name, last_name, email, username, password, "group") VALUES `
 
 	for _, row := range users { //index,name_of_
@@ -434,43 +228,119 @@ func AddUsers(c echo.Context) error {
 	statement, _ := db.Prepare(sqlStr)
 
 	//format all vals at once
-	_, err := statement.Exec(vals...)
+	_, err = statement.Exec(vals...)
 	if err != nil {
 		fmt.Println("exec Error:", err)
-		response := models.Response{
-			Message: "ERROR",
-			Status:  "ERROR",
-			Result:  err.Error(),
-		}
-		return c.JSON(http.StatusInternalServerError, response)
+		return
 	}
+	return
+}
 
-	response := models.Response{
-		Message: "SUCCESS added by " + name,
-		Status:  "SUCCESS",
-		Result:  users,
+/*========================================
+
+ADD cart
+
+========================================*/
+
+func AddCart(cartScan []models.Cart, user string) (err error) {
+	db := db.Conn()
+	vals := []interface{}{}
+	sqlStr := `INSERT INTO public.cart(id, user_id, product_id, quantity) VALUES `
+
+	for _, row := range cartScan { //index,name_of_
+		sqlStr += " (?, ?, ?, ?),"
+		vals = append(vals, row.ID, row.User_id, row.Product_id, row.Quantity)
 	}
+	// trim the last ,
+	sqlStr = strings.TrimSuffix(sqlStr, ",")
+	// replacing ? with $n for postgres
+	sqlStr = utils.ReplaceSQL(sqlStr, "?")
+	//prepare the statement
+	statement, _ := db.Prepare(sqlStr)
 
-	return c.JSON(http.StatusCreated, response)
+	//format all vals at once
+	_, err = statement.Exec(vals...)
+	if err != nil {
+		fmt.Println("exec Error:", err)
+		return err
+	}
+	return
+}
+
+/*
+================================
+
+# UPDATE PRODUCTS
+
+====================================
+*/
+func UpdateProducts(itemContainer models.Item, user string) (updated_id int, err error) { //returns response
+	db := db.Conn()
+
+	statement, err := db.Prepare(`UPDATE public.products SET name=$1, description=$2, price=$3 WHERE product_id=$4 RETURNING product_id;`)
+	if err != nil {
+		fmt.Println("Prep Error:", err)
+		return
+	}
+	var items models.Item
+	err = statement.QueryRow(&itemContainer.Name, &itemContainer.Description, &itemContainer.Price, &itemContainer.Product_id).Scan(&items.Product_id)
+	if err != nil {
+		fmt.Println("Exec Error:", err)
+		return
+	}
+	updated_id = items.Product_id
+	return
+}
+
+/*
+================================
+
+# UPDATE TRANSACTION
+
+====================================
+*/
+func UpdateTransaction(transaction models.Transaction, user string) (updated_id int, err error) {
+	db := db.Conn()
+
+	statement, err := db.Prepare(`UPDATE 
+	public.transaction_history 
+	SET 
+	transaction_id=$1, product_id=$2, transaction_date=$3,
+	user_id=$4, payment_method=$5, quantity=$6 
+	WHERE 
+	id=$7 
+	RETURNING id;`)
+	if err != nil {
+		fmt.Println("Prep Error:", err)
+		return
+	}
+	var transactions models.Transaction
+	err = statement.QueryRow(transaction.Transaction_id,
+		transaction.Product_id,
+		transaction.Transaction_date,
+		transaction.User_id,
+		transaction.Payment_method,
+		transaction.Quantity,
+		transaction.ID).Scan(&transactions.ID)
+	if err != nil {
+		fmt.Println("Exec Error:", err)
+		return
+	}
+	updated_id = transactions.ID
+	return
 }
 
 /*
 ================================
 
 # UPDATE USERS
-
+this part updates users
 ====================================
 */
-func UpdateUsers(c echo.Context) error {
-	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*models.JwtCustomClaims)
-	name := claims.Name
+func UpdateUsers(userContainer models.User, user string) (updated_id int, err error) {
+
 	db := db.Conn()
-	var userContainer models.User // declare "users" as new User struct for binding
-	if err := c.Bind(&userContainer); err != nil {
-		fmt.Println("Bind Error:", err) //if err is nil, bind user
-		return err
-	}
+
 	statement, err := db.Prepare(`UPDATE 
 									public.users 
 									SET 
@@ -481,27 +351,100 @@ func UpdateUsers(c echo.Context) error {
 									RETURNING id;`)
 	if err != nil {
 		fmt.Println("Prep Error:", err)
-		return err
+		return
 	}
 	var users models.User //for Scan() container
-	err = statement.QueryRow(&userContainer.Age, &userContainer.First_name, &userContainer.Last_name, &userContainer.Email, &userContainer.Username, &userContainer.Password, &userContainer.Group, &userContainer.ID).Scan(&users.ID)
+	err = statement.QueryRow(&userContainer.Age,
+		&userContainer.First_name,
+		&userContainer.Last_name,
+		&userContainer.Email,
+		&userContainer.Username,
+		&userContainer.Password,
+		&userContainer.Group,
+		&userContainer.ID).Scan(&users.ID)
 	if err != nil {
 		fmt.Println("Exec Error:", err)
-		response := models.Response{
-			Message: "ERROR",
-			Status:  "ERROR",
-			Result:  err.Error(),
-		}
-		return c.JSON(http.StatusInternalServerError, response)
+		return
+	}
+	updated_id = users.ID
+	return
+}
+
+/*
+================================
+
+# UPDATE Cart
+this part updates cart
+====================================
+*/
+func UpdateCart(cartContainer models.Cart, user string) (cartScan models.Cart, err error) {
+
+	db := db.Conn()
+
+	statement, err := db.Prepare(`UPDATE public.cart
+								SET id=?, user_id=?, product_id=?, quantity=?
+								WHERE <condition>;`)
+	if err != nil {
+		fmt.Println("Prep Error:", err)
+		return
+	}
+	err = statement.QueryRow(&cartContainer.ID, &cartContainer.User_id, &cartContainer.Product_id, &cartContainer.Quantity).Scan(&cartScan.ID)
+	if err != nil {
+		fmt.Println("Exec Error:", err)
+		return
+	}
+	return
+}
+
+/*
+================================
+
+# DELETE TRANSACTION
+
+====================================
+*/
+func DeleteTransaction(transContainer models.Transaction, user string) (transaction_id string, err error) {
+	db := db.Conn()
+
+	statement, err := db.Prepare(`DELETE FROM public.transaction_history WHERE transaction_id=$1 RETURNING transaction_id`)
+	if err != nil {
+		fmt.Println("Prep Error:", err)
+		return
+	}
+	var transactions models.Transaction
+	err = statement.QueryRow(&transContainer.Transaction_id).Scan(&transactions.Transaction_id)
+	if err != nil {
+		fmt.Println("Exec Error:", err)
+		return
+	}
+	transaction_id = transactions.Transaction_id
+	return
+}
+
+/*
+================================
+
+# DELETE PRODUCTS
+
+====================================
+*/
+func DeleteProducts(itemContainer models.Item, user string) (product_id string, err error) {
+
+	db := db.Conn()
+
+	statement, err := db.Prepare(`DELETE FROM products WHERE product_id=$1 RETURNING product_id;`)
+	if err != nil {
+		fmt.Println("Prep Error in controller:", err)
+		return
+	}
+	var items models.Item
+	err = statement.QueryRow(&itemContainer.Product_id).Scan(&items.Product_id)
+	if err != nil {
+		fmt.Println("Exec Error in controller:", err)
+		return
 	}
 
-	response := models.Response{
-		Message: "SUCCESS updated by" + name,
-		Status:  "SUCCESS",
-		Result:  users.ID,
-	}
-
-	return c.JSON(http.StatusCreated, response)
+	return
 }
 
 /*
@@ -511,38 +454,44 @@ func UpdateUsers(c echo.Context) error {
 
 ====================================
 */
-func DeleteUsers(c echo.Context) error {
-	user := c.Get("user").(*jwt.Token)
-	claims := user.Claims.(*models.JwtCustomClaims)
-	name := claims.Name
+func DeleteUsers(userContainer models.User, user string) (users models.User, err error) {
+
 	db := db.Conn()
-	var userContainer models.User // declare "user" as new User struct
-	if err := c.Bind(&userContainer); err != nil {
-		fmt.Println("Bind Error:", err) //if err is nil, bind user
-		return err
-	}
+
 	statement, err := db.Prepare(`DELETE FROM public.users WHERE id=$1 RETURNING id`)
 	if err != nil {
 		fmt.Println("Prep Error:", err)
-		return err
+		return
 	}
-	var users models.User
+	err = statement.QueryRow(&userContainer.ID).Scan(&users.ID)
+	if err != nil {
+		fmt.Println("Exec Error:", err) //response pindah ke usecase, jadi di controller cuma get value dari query;
+		return
+	}
+	return
+}
+
+/*
+================================
+
+# DELETE CART
+
+====================================
+*/
+func DeleteCart(userContainer models.User, user string) (users models.User, err error) {
+
+	db := db.Conn()
+
+	statement, err := db.Prepare(`DELETE FROM public.users WHERE id=$1 RETURNING id`)
+	if err != nil {
+		fmt.Println("Prep Error:", err)
+		return
+	}
 	err = statement.QueryRow(&userContainer.ID).Scan(&users.ID)
 	if err != nil {
 		fmt.Println("Exec Error:", err)
-		response := models.Response{
-			Message: "ERROR",
-			Status:  "ERROR",
-			Result:  err.Error(),
-		}
-		return c.JSON(http.StatusInternalServerError, response)
-	}
 
-	response := models.Response{
-		Message: "SUCCESS updated by" + name,
-		Status:  "SUCCESS",
-		Result:  users.ID,
+		return
 	}
-
-	return c.JSON(http.StatusCreated, response)
+	return
 }

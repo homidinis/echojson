@@ -1,1 +1,4 @@
-- fix Cart and transactions CRUD
+- separate into models, controller, usecase
+usecase = controller functions being called with an arg
+
+test transaction

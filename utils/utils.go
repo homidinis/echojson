@@ -2,6 +2,7 @@ package utils
 
 import (
 	"echojson/models"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -27,7 +28,10 @@ func GetJWTRefresh() string {
 	return jwtRefreshSecretKey
 }
 
-func GenerateAccessToken(user models.User) (string, error) {
+func GenerateAccessTokenAdmin(user models.User) (string, error) {
+	return GenerateToken(user, []byte(GetJWTSecret()))
+}
+func GenerateAccessTokenUser(user models.User) (string, error) {
 	return GenerateToken(user, []byte(GetJWTSecret()))
 }
 
@@ -41,8 +45,8 @@ func GenerateAccessToken(user models.User) (string, error) {
 func GenerateToken(user models.User, secret []byte) (string, error) {
 
 	claims := &models.JwtCustomClaims{ //need to put the struct in a common file exportable by main AND Products or it will complaim
-		Name:  user.First_name,
-		Admin: true,
+		UserID: user.ID,
+		Admin:  user.Admin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
 		},
@@ -79,18 +83,26 @@ func ReplaceSQL(old, searchPattern string) string {
 
 func ExtractToken(c echo.Context) (tokenStr string, err error) {
 	authHeader := c.Request().Header.Get("Authorization")
+	if len(authHeader) == 0 {
+		fmt.Println("authHeader is empty")
+		return "", errors.New("token is empty")
+	}
 
 	// Split the header into parts ("Bearer" and token )
 	parts := strings.Split(authHeader, " ")
 	if len(parts) != 2 || parts[0] != "Bearer" { //if length is not 2 or the first part isn't "bearer"
-		return "error: unauthorized (did you forget to set the Bearer token?)", c.String(http.StatusUnauthorized, "Unauthorized")
+		return "error: unauthorized (did you forget to set the Bearer token?)", errors.New("Unauthorized")
 	}
 	// Get the JWT token from the header
 	tokenStr = parts[1]
 	return
 }
 
-func ExtractAccessClaims(tokenStr string) (username string, err bool) {
+func ExtractAccessClaims(tokenStr string) (username int, isAdmin bool, err error) {
+	if len(tokenStr) == 0 {
+		fmt.Println("tokenStr empty")
+		return 0, false, errors.New("token is empty")
+	}
 	hmacSecretString := GetJWTSecret()
 	hmacSecret := []byte(hmacSecretString)
 	token, _ := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
@@ -100,12 +112,53 @@ func ExtractAccessClaims(tokenStr string) (username string, err bool) {
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
 		fmt.Println("JWT Claims: ", claims)
+		isAdmin = claims["admin"].(bool)
+		if userID, exists := claims["userid"].(float64); exists {
+			// Convert the float64 to int
+			username = int(userID)
+			fmt.Println(isAdmin)
+			return username, isAdmin, err
+		} else {
+			log.Printf("UserID is not of type float64 in JWT Claims")
+		}
 
-		username := claims["name"]
 		// password := claims["password"]
-		return fmt.Sprintf("%v", username), true
+		return username, isAdmin, err
 	} else {
 		log.Printf("Invalid JWT Token")
-		return username, false
+		return username, isAdmin, err
 	}
+}
+
+// func TranslateError(err error) (errs []error) {
+
+//		english := en.New()
+//		uni := ut.New(english, english)
+//		trans, _ := uni.GetTranslator("en")
+//		if err == nil {
+//			return nil
+//		}
+//		validatorErrs := err.(validator.ValidationErrors)
+//		for _, e := range validatorErrs {
+//			translatedErr := fmt.Errorf(e.Translate(trans))
+//			errs = append(errs, translatedErr)
+//		}
+//		return errs
+//	}
+func BindValidateStruct(ctx echo.Context, i interface{}) error {
+	if err := ctx.Bind(i); err != nil {
+		return err
+	}
+
+	if err := ctx.Validate(i); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func IncrementTrxID() string {
+	query = "SELECT transaction_id FROM "
+	transactionCounter++
+	return fmt.Sprintf("T%03d", transactionCounter)
 }

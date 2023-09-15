@@ -1,4 +1,11 @@
-- separate into models, controller, usecase
-usecase = controller functions being called with an arg
 
-test transaction
+- split transaction to transaction_detail
+
+- db transaction: kalau misalnya sudah ke insert ke trx, update stock gagal, rollback (ga jadi insert ke dalam trx)
+- checkout function (select all frm cart where id=userid, put info into transaction tables, delete from cart)
+- group by transaction number / user on trx history table (group according to who is logged in) data jwt dimasukkan ke dalam SELECT query
+
+- summary dashboard admin
+- pending transactions (fitur payment -- trx is pending sampai fungsi Payment dimasukin no. trx)
+
+FIX CART REPOSITORY

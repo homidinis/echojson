@@ -1,6 +1,8 @@
 package usecase
 
 import (
+	"database/sql"
+	"echojson/db"
 	"echojson/models"
 	"echojson/repository"
 	"echojson/utils"
@@ -63,7 +65,8 @@ func InsertProducts(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, response)
 	}
 	user, isAdmin, err := utils.ExtractAccessClaims(tokenStr)
-	fmt.Println(tokenStr)
+	fmt.Println("Token: ")
+	fmt.Print(tokenStr)
 	if err != nil {
 		fmt.Println("something happened with ExtractAccessClaims")
 		fmt.Println(err)
@@ -89,26 +92,27 @@ func InsertProducts(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, response)
 	}
 	//result is when we pass items into AddProducts
-
-	result, err := repository.AddProducts(items)
-	if err != nil {
-		response := models.Response{
-			Message: "ERROR",
-			Status:  "ERROR",
-			Result:  result,
-			Errors:  err.Error(),
+	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+		result, err := repository.AddProducts(items, tx)
+		if err != nil {
+			response := models.Response{
+				Message: "ERROR",
+				Status:  "ERROR",
+				Result:  result,
+				Errors:  err.Error(),
+			}
+			return c.JSON(http.StatusInternalServerError, response)
 		}
-		return c.JSON(http.StatusInternalServerError, response)
-	}
-	response := models.Response{
-		Message: "OK",
-		UserID:  user,
-		Status:  "OK",
-		Result:  result,
-		Errors:  nil,
-	}
-
-	return c.JSON(http.StatusOK, response)
+		response := models.Response{
+			Message: "OK",
+			UserID:  user,
+			Status:  "OK",
+			Result:  result,
+			Errors:  nil,
+		}
+		return c.JSON(http.StatusOK, response)
+	})
+	return err
 
 }
 
@@ -150,26 +154,29 @@ func UpdateProducts(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	result, err := repository.UpdateProducts(itemContainer, user)
-	if err != nil {
-		response := models.Response{
-			Message: "ERROR",
-			Status:  "ERROR",
-			Result:  result,
-			Errors:  err.Error(),
+	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+		result, err := repository.UpdateProducts(itemContainer, user, tx)
+		if err != nil {
+			response := models.Response{
+				Message: "ERROR",
+				Status:  "ERROR",
+				Result:  result,
+				Errors:  err.Error(),
+			}
+			return c.JSON(http.StatusInternalServerError, response)
 		}
-		return c.JSON(http.StatusInternalServerError, response)
-	}
-	if err := c.Validate(itemContainer); err != nil {
-		return err
-	}
-	response := models.Response{
-		Message: "SUCCESS",
-		Status:  "SUCCESS",
-		Result:  result,
-		Errors:  nil,
-	}
-	return c.JSON(http.StatusOK, response)
+		if err := c.Validate(itemContainer); err != nil {
+			return err
+		}
+		response := models.Response{
+			Message: "SUCCESS",
+			Status:  "SUCCESS",
+			Result:  result,
+			Errors:  nil,
+		}
+		return c.JSON(http.StatusOK, response)
+	})
+	return err
 }
 
 /*===============================
@@ -211,21 +218,24 @@ func DeleteProducts(c echo.Context) error { //wrapper for DeleteProducts
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	result, err := repository.DeleteProducts(itemContainer, user)
-	if err != nil {
-		response := models.Response{
-			Message: "ERROR",
-			Status:  "ERROR",
-			Result:  result,
-			Errors:  err.Error(),
+	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+		result, err := repository.DeleteProducts(itemContainer, user, tx)
+		if err != nil {
+			response := models.Response{
+				Message: "ERROR",
+				Status:  "ERROR",
+				Result:  result,
+				Errors:  err.Error(),
+			}
+			return c.JSON(http.StatusInternalServerError, response)
 		}
-		return c.JSON(http.StatusInternalServerError, response)
-	}
-	response := models.Response{
-		Message: "SUCCESS",
-		Status:  "SUCCESS",
-		Result:  result,
-		Errors:  nil,
-	}
-	return c.JSON(http.StatusOK, response) //outputs a response struct
+		response := models.Response{
+			Message: "SUCCESS",
+			Status:  "SUCCESS",
+			Result:  result,
+			Errors:  nil,
+		}
+		return c.JSON(http.StatusOK, response)
+	})
+	return err //outputs a response struct
 }

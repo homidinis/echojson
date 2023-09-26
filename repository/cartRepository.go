@@ -67,10 +67,8 @@ func GetStock(id int) (amount int) {
 // 3. declare vals as an array
 // 4. loop the items array, append into vals each Name, Description, price from items
 // 5. return null if OK, error if error
-func AddCart(cartRequest models.RequestCart, userid int) (vals []interface{}, err error) {
-	db := db.Conn()
+func AddCart(cartRequest models.RequestCart, userid int, tx *sql.Tx) (vals []interface{}, err error) {
 
-	var qty int
 	sqlStr := `INSERT INTO cart (user_id, product_id, quantity, price) VALUES `
 	//if exists, UPDATE instead of INSERT
 	for _, row := range cartRequest.Request { //index,name_of_
@@ -81,36 +79,21 @@ func AddCart(cartRequest models.RequestCart, userid int) (vals []interface{}, er
 	sqlStr = strings.TrimSuffix(sqlStr, ",")
 	// replacing ? with $n for postgres
 	sqlStr = utils.ReplaceSQL(sqlStr, "?")
-	//prepare the statement
-	statement, _ := db.Prepare(sqlStr)
 
 	//format all vals at once
-	_, err = statement.Exec(vals...)
+	_, err = tx.Exec(sqlStr, vals...)
 	fmt.Println(cartRequest.Request)
 	if err != nil {
 		fmt.Println("Exec Error:", err)
 		return
 	}
-
-	for _, cart := range cartRequest.Request { //loop over each request
-		query := "UPDATE products SET quantity=$1 WHERE product_id=$2;" //once added to cart, update quantity
-		_, err := db.Exec(query, qty-cart.Quantity, cart.Product_id)    //set quantity as quantity (stock we acquired from db)
-		fmt.Println("current stock, supposedly:")
-		fmt.Println(qty - cart.Quantity)
-		fmt.Println("Updated cart")
-		if err != nil {
-			fmt.Println(err)
-			// Handle the error appropriately
-		}
-	}
 	return
 }
-func TransactionDetailInsert(cart models.Cart) (err error) {
-	db := db.Conn()
+func TransactionDetailInsert(cart models.Cart, tx *sql.Tx) (err error) {
 
 	query2 := "INSERT INTO public.transaction_detail(transaction_id,product_id, quantity, price) VALUES ($1, $2, $3,$4);"
 
-	_, err = db.Exec(query2, utils.IncrementTrxID(), cart.Product_id, cart.Quantity, cart.Price) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
+	_, err = tx.Exec(query2, utils.IncrementTrxID(), cart.Product_id, cart.Quantity, cart.Price) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
 	if err != nil {
 		fmt.Println("error in trxdi queryrow:")
 		fmt.Println(err)
@@ -120,10 +103,9 @@ func TransactionDetailInsert(cart models.Cart) (err error) {
 	fmt.Println(cart)
 	return
 }
-func TransactionHistoryInsert(cart models.Cart) (err error) {
-	db := db.Conn()
+func TransactionHistoryInsert(cart models.Cart, tx *sql.Tx) (err error) {
 	query3 := "INSERT INTO public.transaction_history(transaction_id,user_id) VALUES ($1,$2);"
-	_, err = db.Exec(query3, utils.IncrementTrxID(), cart.User_id) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
+	_, err = tx.Exec(query3, utils.IncrementTrxID(), cart.User_id) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
 	if err != nil {
 		fmt.Println("error in trxhi queryrow:")
 		fmt.Println(err)
@@ -139,16 +121,15 @@ func TransactionHistoryInsert(cart models.Cart) (err error) {
 
 ====================================
 */
-func UpdateCart(cartContainer models.Cart, user int) (updated_id int, err error) { //returns response
-	db := db.Conn()
+func UpdateCart(cartContainer models.Cart, user int, tx *sql.Tx) (updated_id int, err error) { //returns response
 
-	statement, err := db.Prepare(`UPDATE public.cart SET product_id=$1, quantity=$2 WHERE id=$3 RETURNING product_id`)
+	query := `UPDATE public.cart SET product_id=$1, quantity=$2 WHERE id=$3 RETURNING product_id`
 	if err != nil {
 		fmt.Println("Prep Error:", err)
 		return
 	}
 	var cartScan models.Cart
-	err = statement.QueryRow(&cartContainer.Product_id, &cartContainer.Quantity, &cartContainer.ID).Scan(&cartScan.Product_id)
+	err = tx.QueryRow(query, &cartContainer.Product_id, &cartContainer.Quantity, &cartContainer.ID).Scan(&cartScan.Product_id)
 	if err != nil {
 		fmt.Println("Exec Error:", err)
 		return

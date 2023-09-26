@@ -57,8 +57,7 @@ ADD TRANSACTION
 
 ========================================*/
 
-func AddTransaction(transactions models.RequestTransaction, user int) (vals []interface{}, err error) {
-	db := db.Conn()
+func AddTransaction(transactions models.RequestTransaction, user int, tx *sql.Tx) (vals []interface{}, err error) {
 	sqlStr := `INSERT INTO public.transaction_history(transaction_id, transaction_date, id, user_id, payment_method)VALUES`
 	for _, row := range transactions.Request { //index,name_of_ ; for every data inputted in, run loop use Request for bulk inserts
 		sqlStr += " (?, ?, ?, ?, ?),"
@@ -68,17 +67,13 @@ func AddTransaction(transactions models.RequestTransaction, user int) (vals []in
 	sqlStr = strings.TrimSuffix(sqlStr, ",")
 	// replacing ? with $n for postgres
 	sqlStr = utils.ReplaceSQL(sqlStr, "?")
-	//prepare the statement
-	statement, _ := db.Prepare(sqlStr)
-	fmt.Println(statement)
 	//format all vals at once
-	_, err = statement.Exec(vals...)
+	_, err = tx.Exec(sqlStr, vals...)
 
 	if err != nil {
 		fmt.Println("Error preparing statement:", err)
 		return
 	}
-	fmt.Println(statement)
 
 	// Check if the number of placeholders matches the number of values
 	if len(vals) != strings.Count(sqlStr, "?") {
@@ -95,23 +90,21 @@ func AddTransaction(transactions models.RequestTransaction, user int) (vals []in
 
 ====================================
 */
-func UpdateTransaction(trx models.Transaction, user int) (updated_id int, err error) {
-	db := db.Conn()
-
-	statement, err := db.Prepare(`UPDATE 
+func UpdateTransaction(trx models.Transaction, user int, tx *sql.Tx) (updated_id int, err error) {
+	query := `UPDATE 
 	public.transaction_history 
 	SET 
 	transaction_id=$1, product_id=$2, transaction_date=$3,
 	user_id=$4, payment_method=$5, quantity=$6 
 	WHERE 
 	id=$7 
-	RETURNING id;`)
+	RETURNING id;`
 	if err != nil {
 		fmt.Println("Prep Error:", err)
 		return
 	}
 	var transactions models.Transaction
-	err = statement.QueryRow(trx.Transaction_id,
+	err = tx.QueryRow(query, trx.Transaction_id,
 		trx.Transaction_date,
 		trx.User_id,
 		trx.Payment_method,
@@ -131,16 +124,14 @@ func UpdateTransaction(trx models.Transaction, user int) (updated_id int, err er
 
 ====================================
 */
-func DeleteTransaction(transContainer models.Transaction, user int) (transaction_id string, err error) {
-	db := db.Conn()
-
-	statement, err := db.Prepare(`DELETE FROM public.transaction_history WHERE transaction_id=$1 RETURNING transaction_id`)
+func DeleteTransaction(transContainer models.Transaction, user int, tx *sql.Tx) (transaction_id string, err error) {
+	query := `DELETE FROM public.transaction_history WHERE transaction_id=$1 RETURNING transaction_id`
 	if err != nil {
 		fmt.Println("Prep Error:", err)
 		return
 	}
 	var transactions models.Transaction //output
-	err = statement.QueryRow(&transContainer.Transaction_id).Scan(&transactions.Transaction_id)
+	err = tx.QueryRow(query, &transContainer.Transaction_id).Scan(&transactions.Transaction_id)
 	if err != nil {
 		fmt.Println("Exec Error:", err)
 		return

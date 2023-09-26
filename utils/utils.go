@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"database/sql"
+	"echojson/db"
 	"echojson/models"
 	"errors"
 	"fmt"
@@ -158,7 +160,43 @@ func BindValidateStruct(ctx echo.Context, i interface{}) error {
 }
 
 func IncrementTrxID() string {
-	query = "SELECT transaction_id FROM "
-	transactionCounter++
-	return fmt.Sprintf("T%03d", transactionCounter)
+	db := db.Conn()
+	query := "SELECT transaction_id FROM transaction_history ORDER BY DESC LIMIT 1"
+	row := db.QueryRow(query)
+
+	var latestTransactionID string
+	if latestTransactionID == "" {
+		fmt.Println("Latest transaction_id is empty")
+		return "T001"
+	}
+
+	err := row.Scan(&latestTransactionID)
+
+	numericPart, err := strconv.Atoi(latestTransactionID[1:])
+	if err != nil {
+		fmt.Println("Error in parsing numeric part:", err)
+		return ""
+	}
+	numericPart++
+
+	return fmt.Sprintf("T%03d", numericPart)
+}
+
+func DBTransaction(db *sql.DB, txFunc func(*sql.Tx) error) (err error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			tx.Rollback()
+			panic(p) // Rollback Panic
+		} else if err != nil {
+			tx.Rollback() // err is not nill
+		} else {
+			err = tx.Commit() // err is nil
+		}
+	}()
+	err = txFunc(tx)
+	return err
 }

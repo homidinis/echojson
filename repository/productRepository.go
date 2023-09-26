@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"database/sql"
 	"echojson/db"
 	"echojson/models"
 	"echojson/utils"
@@ -20,9 +21,11 @@ func GetProducts(id int) (products []models.Item, err error) {
 	}
 	fmt.Println(query)
 	rows, err := db.Query(query, data...) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
+	fmt.Println("cek lagi di sini getproducts: ", err)
+
 	if err != nil {
-		fmt.Println(err)
-		return
+		fmt.Println("error in repo get products", err.Error())
+		return products, err
 	}
 
 	for rows.Next() { //for every row result, run Scan then Append the result into the products struct
@@ -36,15 +39,31 @@ func GetProducts(id int) (products []models.Item, err error) {
 	return
 }
 
+func GetProductsV2(id int) (products models.Item, err error) {
+	db := db.Conn()
+
+	query := "SELECT name, description, price, product_id, quantity FROM products WHERE product_id=$1"
+	fmt.Println(query)
+	err = db.QueryRow(query, id).Scan(&products.Name, &products.Description, &products.Price, &products.Product_id, &products.Quantity) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
+	fmt.Println("cek lagi di sini getproductsv2: ", err)
+
+	if err != nil {
+		fmt.Println("error in repo get products", err.Error())
+		if err == sql.ErrNoRows {
+			fmt.Println("product not exists")
+		}
+		return products, err
+	}
+	return
+}
+
 /*========================================
 
 ADD PRODUCTS
 
 ========================================*/
 
-func AddProducts(items models.RequestItem) (vals []interface{}, err error) {
-	db := db.Conn()
-
+func AddProducts(items models.RequestItem, tx *sql.Tx) (vals []interface{}, err error) {
 	//1. declare array of Item struct (items)
 	//2. bind items to json input
 	//3. declare vals as an array
@@ -61,10 +80,9 @@ func AddProducts(items models.RequestItem) (vals []interface{}, err error) {
 	// replacing ? with $n for postgres
 	sqlStr = utils.ReplaceSQL(sqlStr, "?")
 	//prepare the statement
-	statement, _ := db.Prepare(sqlStr)
 
 	//format all vals at once
-	_, err = statement.Exec(vals...)
+	_, err = tx.Exec(sqlStr, vals...)
 	if err != nil {
 		fmt.Println("Exec Error:", err)
 		return
@@ -79,21 +97,31 @@ func AddProducts(items models.RequestItem) (vals []interface{}, err error) {
 
 ====================================
 */
-func UpdateProducts(itemContainer models.Item, user int) (updated_id int, err error) { //returns response
-	db := db.Conn()
-
-	statement, err := db.Prepare(`UPDATE public.products SET name=$1, description=$2, price=$3 WHERE product_id=$4 RETURNING product_id;`)
+func UpdateProducts(itemContainer models.Item, user int, tx *sql.Tx) (updated_id int, err error) { //returns response
+	query := `UPDATE public.products SET name=$1, description=$2, price=$3 WHERE product_id=$4 RETURNING product_id;`
 	if err != nil {
 		fmt.Println("Prep Error:", err)
 		return
 	}
 	var items models.Item
-	err = statement.QueryRow(&itemContainer.Name, &itemContainer.Description, &itemContainer.Price, &itemContainer.Product_id).Scan(&items.Product_id)
+	err = tx.QueryRow(query, &itemContainer.Name, &itemContainer.Description, &itemContainer.Price, &itemContainer.Product_id).Scan(&items.Product_id)
 	if err != nil {
 		fmt.Println("Exec Error:", err)
 		return
 	}
 	updated_id = items.Product_id
+	return
+}
+
+func UpdateProductsQuantity(qty int, product_id int) (err error) {
+	db := db.Conn()
+
+	query := "UPDATE public.products SET quantity=$1 WHERE product_id=$2"
+	err = db.QueryRow(query, qty, product_id)
+	if err != nil {
+		fmt.Println("update products quantity error:")
+		return err
+	}
 	return
 }
 
@@ -104,17 +132,15 @@ func UpdateProducts(itemContainer models.Item, user int) (updated_id int, err er
 
 ====================================
 */
-func DeleteProducts(itemContainer models.Item, user int) (product_id string, err error) {
+func DeleteProducts(itemContainer models.Item, user int, tx *sql.Tx) (product_id string, err error) {
 
-	db := db.Conn()
-
-	statement, err := db.Prepare(`DELETE FROM products WHERE product_id=$1 RETURNING product_id;`)
+	query := `DELETE FROM products WHERE product_id=$1 RETURNING product_id;`
 	if err != nil {
 		fmt.Println("Prep Error in controller:", err)
 		return
 	}
 	var items models.Item
-	err = statement.QueryRow(&itemContainer.Product_id).Scan(&items.Product_id)
+	err = tx.QueryRow(query, &itemContainer.Product_id).Scan(&items.Product_id)
 	if err != nil {
 		fmt.Println("Exec Error in controller:", err)
 		return

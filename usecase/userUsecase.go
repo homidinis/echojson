@@ -1,6 +1,8 @@
 package usecase
 
 import (
+	"database/sql"
+	"echojson/db"
 	"echojson/models"
 	"echojson/repository"
 	"echojson/utils"
@@ -56,24 +58,27 @@ func InsertUsers(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	result, err := repository.AddUser(*users, user)
-	if err != nil {
-		response := models.Response{
-			UserID:  user,
-			Message: "ERROR in AddUser calling",
-			Status:  "ERROR",
-			Result:  result,
-			Errors:  err.Error(),
+	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+		result, err := repository.AddUser(*users, user, tx)
+		if err != nil {
+			response := models.Response{
+				UserID:  user,
+				Message: "ERROR in AddUser calling",
+				Status:  "ERROR",
+				Result:  result,
+				Errors:  err.Error(),
+			}
+			return c.JSON(http.StatusInternalServerError, response)
 		}
-		return c.JSON(http.StatusInternalServerError, response)
-	}
-	response := models.Response{
-		Message: "SUCCESS",
-		Status:  "SUCCESS",
-		Result:  result,
-		Errors:  nil,
-	}
-	return c.JSON(http.StatusOK, response)
+		response := models.Response{
+			Message: "SUCCESS",
+			Status:  "SUCCESS",
+			Result:  result,
+			Errors:  nil,
+		}
+		return c.JSON(http.StatusOK, response)
+	})
+	return err
 }
 
 func UpdateUsers(c echo.Context) error {
@@ -87,8 +92,16 @@ func UpdateUsers(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	user, _, err := utils.ExtractAccessClaims(tokenStr)
-
+	user, isAdmin, err := utils.ExtractAccessClaims(tokenStr)
+	if !isAdmin {
+		response := models.Response{
+			Message: "isAdmin not true!",
+			Status:  "ERROR",
+			Result:  nil,
+			Errors:  "Unauthorized",
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
 	var userContainer models.User // declare "users" as new User struct for binding
 	err = utils.BindValidateStruct(c, &userContainer)
 	if err != nil {
@@ -99,24 +112,27 @@ func UpdateUsers(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	result, err := repository.UpdateUser(userContainer, user)
-	if err != nil {
-		fmt.Println("Exec Error:", err)
-		response := models.Response{
-			Message: "ERROR",
-			Status:  "ERROR",
-			Result:  result,
-			Errors:  err.Error(),
+	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+		result, err := repository.UpdateUser(userContainer, user, tx)
+		if err != nil {
+			fmt.Println("Exec Error:", err)
+			response := models.Response{
+				Message: "ERROR",
+				Status:  "ERROR",
+				Result:  result,
+				Errors:  err.Error(),
+			}
+			return c.JSON(http.StatusInternalServerError, response)
 		}
-		return c.JSON(http.StatusInternalServerError, response)
-	}
-	response := models.Response{
-		Message: "SUCCESS",
-		Status:  "SUCCESS",
-		Result:  result,
-		Errors:  nil,
-	}
-	return c.JSON(http.StatusOK, response)
+		response := models.Response{
+			Message: "SUCCESS",
+			Status:  "SUCCESS",
+			Result:  result,
+			Errors:  nil,
+		}
+		return c.JSON(http.StatusOK, response)
+	})
+	return err
 }
 
 func DeleteUsers(c echo.Context) error {
@@ -130,8 +146,16 @@ func DeleteUsers(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	user, _, err := utils.ExtractAccessClaims(tokenStr)
-
+	user, isAdmin, err := utils.ExtractAccessClaims(tokenStr)
+	if !isAdmin {
+		response := models.Response{
+			Message: "isAdmin not true!",
+			Status:  "ERROR",
+			Result:  nil,
+			Errors:  "Unauthorized",
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
 	var userContainer models.User
 	err = utils.BindValidateStruct(c, &userContainer)
 	if err != nil {
@@ -142,22 +166,24 @@ func DeleteUsers(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-
-	result, err := repository.DeleteUser(userContainer, user)
-	if err != nil {
-		response := models.Response{
-			Message: "ERROR",
-			Status:  "ERROR",
-			Result:  result,
-			Errors:  err.Error(),
+	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+		result, err := repository.DeleteUser(userContainer, user, tx)
+		if err != nil {
+			response := models.Response{
+				Message: "ERROR",
+				Status:  "ERROR",
+				Result:  result,
+				Errors:  err.Error(),
+			}
+			return c.JSON(http.StatusInternalServerError, response)
 		}
-		return c.JSON(http.StatusInternalServerError, response)
-	}
-	response := models.Response{
-		Message: "SUCCESS",
-		Status:  "SUCCESS",
-		Result:  result,
-		Errors:  nil,
-	}
-	return c.JSON(http.StatusOK, response)
+		response := models.Response{
+			Message: "SUCCESS",
+			Status:  "SUCCESS",
+			Result:  result,
+			Errors:  nil,
+		}
+		return c.JSON(http.StatusOK, response)
+	})
+	return err
 }

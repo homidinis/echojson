@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"database/sql"
 	"echojson/db"
 	"echojson/models"
 	"echojson/utils"
@@ -47,8 +48,8 @@ ADD users
 
 ========================================*/
 
-func AddUser(users models.RequestUser, user int) (vals []interface{}, err error) {
-	db := db.Conn()
+func AddUser(users models.RequestUser, user int, tx *sql.Tx) (vals []interface{}, err error) {
+
 	sqlStr := `INSERT INTO public.users(age, first_name, last_name, email, username, password, "group") VALUES `
 
 	for _, row := range users.Request { //index,name_of_
@@ -59,11 +60,9 @@ func AddUser(users models.RequestUser, user int) (vals []interface{}, err error)
 	sqlStr = strings.TrimSuffix(sqlStr, ",")
 	// replacing ? with $n for postgres
 	sqlStr = utils.ReplaceSQL(sqlStr, "?")
-	//prepare the statement
-	statement, _ := db.Prepare(sqlStr)
 
 	//format all vals at once
-	_, err = statement.Exec(vals...)
+	_, err = tx.Exec(sqlStr, vals...)
 	if err != nil {
 		fmt.Println("exec Error:", err)
 		return
@@ -78,24 +77,23 @@ func AddUser(users models.RequestUser, user int) (vals []interface{}, err error)
 this part updates users
 ====================================
 */
-func UpdateUser(userContainer models.User, user int) (updated_id int, err error) {
+func UpdateUser(userContainer models.User, user int, tx *sql.Tx) (updated_id int, err error) {
 
-	db := db.Conn()
-
-	statement, err := db.Prepare(`UPDATE 
+	query := `UPDATE 
 									public.users 
 									SET 
 									age=$1, first_name=$2, last_name=$3, email=$4, username=$5, 
 									password=$6, "group"=$7 
 									WHERE 
 									id=$8 
-									RETURNING id;`)
+									RETURNING id;`
 	if err != nil {
 		fmt.Println("Prep Error:", err)
 		return
 	}
 	var users models.User //for Scan() container
-	err = statement.QueryRow(&userContainer.Age,
+	err = tx.QueryRow(query,
+		&userContainer.Age,
 		&userContainer.First_name,
 		&userContainer.Last_name,
 		&userContainer.Email,
@@ -118,16 +116,13 @@ func UpdateUser(userContainer models.User, user int) (updated_id int, err error)
 
 ====================================
 */
-func DeleteUser(userContainer models.User, user int) (users models.User, err error) {
-
-	db := db.Conn()
-
-	statement, err := db.Prepare(`DELETE FROM public.users WHERE id=$1 RETURNING id`)
+func DeleteUser(userContainer models.User, user int, tx *sql.Tx) (users models.User, err error) {
+	query := `DELETE FROM public.users WHERE id=$1 RETURNING id`
 	if err != nil {
 		fmt.Println("Prep Error:", err)
 		return
 	}
-	err = statement.QueryRow(&userContainer.ID).Scan(&users.ID)
+	err = tx.QueryRow(query, &userContainer.ID).Scan(&users.ID)
 	if err != nil {
 		fmt.Println("Exec Error:", err) //response pindah ke usecase, jadi di controller cuma get value dari query;
 		return

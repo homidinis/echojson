@@ -1,6 +1,8 @@
 package usecase
 
 import (
+	"database/sql"
+	"echojson/db"
 	"echojson/models"
 	"echojson/repository"
 	"echojson/utils"
@@ -54,7 +56,7 @@ func Checkout(c echo.Context) error {
 	for _, cart := range carts {
 		qty = repository.GetStock(cart.Product_id)
 		if err != nil {
-			fmt.Println("error in getstock")
+			fmt.Println("error in getstock:")
 			fmt.Println(cart.Product_id)
 			return err
 		}
@@ -80,23 +82,32 @@ func Checkout(c echo.Context) error {
 			return c.JSON(http.StatusInternalServerError, result)
 		} else {
 			fmt.Println("if check passed")
-			err = repository.TransactionDetailInsert(cart)
-			if err != nil {
-				fmt.Println(err)
-			}
-			err = repository.TransactionHistoryInsert(cart)
-			if err != nil {
-				fmt.Println(err)
-			}
-			fmt.Println("id:")
-			fmt.Println(cart.Product_id)
-			_, err = repository.DeleteCart(cart, user)
-
-			fmt.Println("cart delete:")
-			fmt.Println(cart)
+			err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+				err = repository.TransactionDetailInsert(cart, tx)
+				if err != nil {
+					fmt.Println(err)
+				}
+				err = repository.TransactionHistoryInsert(cart, tx)
+				if err != nil {
+					fmt.Println(err)
+				}
+				fmt.Println("id:")
+				fmt.Println(cart.Product_id)
+				_, err = repository.DeleteCart(cart, user)
+				if err != nil {
+					return err
+				}
+				fmt.Println("cart delete:")
+				fmt.Println(cart)
+				fmt.Println("cart product id: ")
+				fmt.Print(cart.Product_id)
+				err = repository.UpdateProductsQuantity(qty-cart.Quantity, cart.Product_id) //set quantity as quantity (stock we acquired from db)
+				fmt.Println("Updated cart")
+				return err
+			})
+			return err
 		}
 	}
-
 	result := models.Response{
 		Message: "SUCCESS",
 		Status:  "SUCCESS",
@@ -169,7 +180,9 @@ func InsertCart(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, response)
 	}
 	user, _, err := utils.ExtractAccessClaims(tokenStr)
-
+	if err != nil {
+		return err
+	}
 	// var cart = new(models.Requestcart)
 	err = utils.BindValidateStruct(c, &cart)
 	if err != nil {
@@ -181,34 +194,43 @@ func InsertCart(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, response)
 	}
 	for _, cartReq := range cart.Request {
-		products, err := repository.GetProducts(cartReq.Product_id)
+		products, err := repository.GetProductsV2(cartReq.Product_id)
 		if err != nil {
 			fmt.Println("err in getproducts, insert product:")
+			result := models.Response{
+				Message: "ERROR IN GETPRODUCTS",
+				Status:  "error",
+				Result:  nil,
+				Errors:  err.Error(),
+			}
 			fmt.Print(err)
-			return c.JSON(http.StatusInternalServerError, errors.New("product does not exist")) //need to return json to stop
-		} else if cartReq.Quantity > products[0].Quantity {
-			fmt.Println("quantity empty!")
-			fmt.Println(err)
-			return c.JSON(http.StatusInternalServerError, errors.New("qty empty!"))
+			return c.JSON(http.StatusInternalServerError, result) //need to return json to stop
+		} else if cartReq.Quantity > products.Quantity {
+			fmt.Println("quantity empty! err: ")
+			fmt.Print(err)
+			return c.JSON(http.StatusInternalServerError, errors.New("qty empty"))
 		}
 	}
-	result, err := repository.AddCart(cart, user)
-	if err != nil {
+	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+		result, err := repository.AddCart(cart, user, tx)
+		if err != nil {
+			response := models.Response{
+				Message: "ERROR in AddCart calling",
+				Status:  "ERROR",
+				Result:  result,
+				Errors:  err.Error(),
+			}
+			return c.JSON(http.StatusInternalServerError, response)
+		}
 		response := models.Response{
-			Message: "ERROR in AddCart calling",
-			Status:  "ERROR",
+			Message: "SUCCESS",
+			Status:  "SUCCESS",
 			Result:  result,
-			Errors:  err.Error(),
+			Errors:  nil,
 		}
-		return c.JSON(http.StatusInternalServerError, response)
-	}
-	response := models.Response{
-		Message: "SUCCESS",
-		Status:  "SUCCESS",
-		Result:  result,
-		Errors:  nil,
-	}
-	return c.JSON(http.StatusOK, response)
+		return c.JSON(http.StatusOK, response)
+	})
+	return err
 }
 func UpdateCart(c echo.Context) error {
 	tokenStr, err := utils.ExtractToken(c)
@@ -222,34 +244,46 @@ func UpdateCart(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, response)
 	}
 	user, _, err := utils.ExtractAccessClaims(tokenStr)
-
-	var cartContainer models.Cart // declare "users" as new User struct for binding
-	err = utils.BindValidateStruct(c, &cartContainer)
 	if err != nil {
 		response := models.Response{
-			Message: "ERROR in binding",
-			Status:  "ERROR in binding",
-			Result:  err.Error(),
-		}
-		return c.JSON(http.StatusInternalServerError, response)
-	}
-	result, err := repository.UpdateCart(cartContainer, user)
-	if err != nil {
-		response := models.Response{
-			Message: "ERROR",
+			Message: "ExtractAccessClaims error in update cart",
 			Status:  "ERROR",
 			Result:  nil,
 			Errors:  err.Error(),
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	response := models.Response{
-		Message: "SUCCESS",
-		Status:  "SUCCESS",
-		Result:  result,
-		Errors:  nil,
+	var cartContainer models.Cart // declare "users" as new User struct for binding
+	err = utils.BindValidateStruct(c, &cartContainer)
+	if err != nil {
+		response := models.Response{
+			Message: "ERROR in binding",
+			Status:  "ERROR in binding",
+			Result:  nil,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
 	}
-	return c.JSON(http.StatusOK, response)
+	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+		result, err := repository.UpdateCart(cartContainer, user, tx)
+		if err != nil {
+			response := models.Response{
+				Message: "ERROR",
+				Status:  "ERROR",
+				Result:  nil,
+				Errors:  err.Error(),
+			}
+			return c.JSON(http.StatusInternalServerError, response)
+		}
+		response := models.Response{
+			Message: "SUCCESS",
+			Status:  "SUCCESS",
+			Result:  result,
+			Errors:  nil,
+		}
+		return c.JSON(http.StatusOK, response)
+	})
+	return err
 }
 
 func DeleteCart(c echo.Context) error {
@@ -264,6 +298,15 @@ func DeleteCart(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, response)
 	}
 	user, _, err := utils.ExtractAccessClaims(tokenStr)
+	if err != nil {
+		response := models.Response{
+			Message: "ERROR in extractaccessclaims, delete cart",
+			Status:  "ERROR in binding",
+			Result:  nil,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
 
 	var cart models.Cart
 	err = utils.BindValidateStruct(c, &cart)
@@ -271,7 +314,8 @@ func DeleteCart(c echo.Context) error {
 		response := models.Response{
 			Message: "ERROR in binding",
 			Status:  "ERROR in binding",
-			Result:  err.Error(),
+			Result:  nil,
+			Errors:  err.Error(),
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}

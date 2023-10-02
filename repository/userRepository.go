@@ -29,12 +29,14 @@ func GetUser(id int) (userContainer []models.User) { //return userContainer, yan
 	fmt.Println("query: " + query)
 	rows, err := db.Query(query, data...) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
 	if err != nil {
+		fmt.Println("err in getuser query: ")
 		fmt.Println(err)
 	}
 	for rows.Next() {
 		var users models.User
 		err := rows.Scan(&users.ID, &users.Age, &users.First_name, &users.Last_name, &users.Email, &users.Username, &users.Admin)
 		if err != nil {
+			fmt.Println("err in getuser query: ")
 			fmt.Println(err)
 		}
 		userContainer = append(userContainer, users)
@@ -55,6 +57,28 @@ func AddUser(users models.RequestUser, user int, tx *sql.Tx) (vals []interface{}
 	for _, row := range users.Request { //index,name_of_
 		sqlStr += " (?, ?, ?, ?, ?, ?, ?),"
 		vals = append(vals, row.Age, row.First_name, row.Last_name, row.Email, row.Username, row.Password, row.Admin)
+	}
+	// trim the last ,
+	sqlStr = strings.TrimSuffix(sqlStr, ",")
+	// replacing ? with $n for postgres
+	sqlStr = utils.ReplaceSQL(sqlStr, "?")
+
+	//format all vals at once
+	_, err = tx.Exec(sqlStr, vals...)
+	if err != nil {
+		fmt.Println("exec Error:", err)
+		return
+	}
+	return
+}
+
+func Register(users models.RequestUser, user int, tx *sql.Tx) (vals []interface{}, err error) {
+
+	sqlStr := `INSERT INTO public.users(age, first_name, last_name, email, username, password) VALUES `
+
+	for _, row := range users.Request { //index,name_of_
+		sqlStr += " (?, ?, ?, ?, ?, ?, ?),"
+		vals = append(vals, row.Age, row.First_name, row.Last_name, row.Email, row.Username, row.Password)
 	}
 	// trim the last ,
 	sqlStr = strings.TrimSuffix(sqlStr, ",")

@@ -117,10 +117,11 @@ func UpdateProductsQuantity(qty int, product_id int) (err error) {
 	db := db.Conn()
 
 	query := "UPDATE public.products SET quantity=$1 WHERE product_id=$2"
-	err = db.QueryRow(query, qty, product_id)
+	_, err = db.Exec(query, qty, product_id)
 	if err != nil {
-		fmt.Println("update products quantity error:")
-		return err
+		fmt.Println("update products quantity error: ")
+		fmt.Println(err.Error())
+		return
 	}
 	return
 }
@@ -142,7 +143,7 @@ func DeleteProducts(itemContainer models.Item, user int, tx *sql.Tx) (product_id
 	var items models.Item
 	err = tx.QueryRow(query, &itemContainer.Product_id).Scan(&items.Product_id)
 	if err != nil {
-		fmt.Println("Exec Error in controller:", err)
+		fmt.Println("Deleteproducts Error in controller:", err)
 		return
 	}
 

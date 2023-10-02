@@ -134,6 +134,15 @@ func UpdateProducts(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, response)
 	}
 	user, isAdmin, err := utils.ExtractAccessClaims(tokenStr)
+	if err != nil {
+		response := models.Response{
+			Message: "extractaccessclaims error in update products!",
+			Status:  "ERROR",
+			Result:  nil,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
 	if !isAdmin {
 		response := models.Response{
 			Message: "isAdmin not true!",
@@ -198,6 +207,15 @@ func DeleteProducts(c echo.Context) error { //wrapper for DeleteProducts
 		return c.JSON(http.StatusInternalServerError, response)
 	}
 	user, isAdmin, err := utils.ExtractAccessClaims(tokenStr)
+	if err != nil {
+		response := models.Response{
+			Message: "ExtractAccessClaims error!",
+			Status:  "ERROR",
+			Result:  nil,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
 	if !isAdmin {
 		response := models.Response{
 			Message: "isAdmin not true!",

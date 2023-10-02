@@ -24,6 +24,15 @@ func GetTransactions(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, response)
 	}
 	user, _, err := utils.ExtractAccessClaims(tokenStr)
+	if err != nil {
+		response := models.Response{
+			Message: "ExtractAccessClaims error!",
+			Status:  "ERROR",
+			Result:  nil,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
 
 	var transactions models.Transaction
 	if err := c.Bind(&transactions); err != nil {
@@ -58,6 +67,15 @@ func InsertTransactions(c echo.Context) error {
 		return err
 	}
 	user, isAdmin, err := utils.ExtractAccessClaims(tokenStr)
+	if err != nil {
+		response := models.Response{
+			Message: "ExtractAccessClaims error!",
+			Status:  "ERROR",
+			Result:  nil,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
 	if !isAdmin {
 		response := models.Response{
 			Message: "isAdmin not true!",
@@ -105,6 +123,15 @@ func DeleteTransactions(c echo.Context) error {
 		return err
 	}
 	user, isAdmin, err := utils.ExtractAccessClaims(tokenStr)
+	if err != nil {
+		response := models.Response{
+			Message: "ExtractAccessClaims error!",
+			Status:  "ERROR",
+			Result:  nil,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
 	if !isAdmin {
 		response := models.Response{
 			Message: "isAdmin not true!",

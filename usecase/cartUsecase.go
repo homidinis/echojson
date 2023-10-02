@@ -57,6 +57,16 @@ func Checkout(c echo.Context) error {
 
 	var qty int
 	carts, err := repository.GetCart(0, cartScan.User_id) //product id,user id
+	if len(carts) == 0 {
+		result := models.Response{
+			Message: "ERROR CART EMPTY",
+			Status:  "ERROR",
+			Result:  nil,
+			Errors:  errors.New("cart is empty"),
+		}
+		fmt.Println(result)
+		return c.JSON(http.StatusInternalServerError, result)
+	}
 	fmt.Println("carts:")
 	fmt.Println(carts)
 	var trxID string
@@ -115,6 +125,9 @@ func Checkout(c echo.Context) error {
 				fmt.Println("cart product id: ")
 				fmt.Print(cart.Product_id)
 				err = repository.UpdateProductsQuantity(qty-cart.Quantity, cart.Product_id) //set quantity as quantity (stock we acquired from db)
+				if err != nil {
+					return err
+				}
 				fmt.Println("Updated cart")
 
 				for _, cart := range carts {
@@ -249,7 +262,13 @@ func InsertCart(c echo.Context) error {
 		} else if cartReq.Quantity > products.Quantity {
 			fmt.Println("quantity empty! err: ")
 			fmt.Print(err)
-			return c.JSON(http.StatusInternalServerError, errors.New("qty empty"))
+			result := models.Response{
+				Message: "ERROR IN GETPRODUCTS",
+				Status:  "error",
+				Result:  nil,
+				Errors:  "qty bigger than stock",
+			}
+			return c.JSON(http.StatusInternalServerError, result)
 		}
 	}
 	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {

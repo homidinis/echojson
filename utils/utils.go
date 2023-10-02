@@ -48,7 +48,7 @@ func GenerateToken(user models.User, secret []byte) (string, error) {
 
 	claims := &models.JwtCustomClaims{ //need to put the struct in a common file exportable by main AND Products or it will complaim
 		UserID: user.ID,
-		Admin:  user.Admin,
+		Admin:  *user.Admin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
 		},

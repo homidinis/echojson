@@ -39,12 +39,14 @@ func Login(c echo.Context) error {
 	}
 
 	//convert container to User instance so it can be passed into generate access token (gen access token needs User struct for "user.First_name")
-	if containerSlice.Admin {
+	admin := new(bool) //bool is *bool now, using straight "bool" in admin field returns "untyped bool constant"
+	*admin = true
+	if *containerSlice.Admin { //if container admin is true, generate admin token
 		userInstance := models.User{
 			ID:       containerSlice.ID,
 			Username: containerSlice.Username,
 			Password: containerSlice.Password,
-			Admin:    true,
+			Admin:    admin,
 		}
 		token, err := utils.GenerateAccessTokenAdmin(userInstance)
 		fmt.Println(userInstance.ID)
@@ -60,11 +62,12 @@ func Login(c echo.Context) error {
 		}
 		return c.JSON(http.StatusOK, res)
 	} else {
+		*admin = false
 		userInstance := models.User{
 			ID:       containerSlice.ID,
 			Username: containerSlice.Username,
 			Password: containerSlice.Password,
-			Admin:    false,
+			Admin:    admin,
 		}
 		token, err := utils.GenerateAccessTokenUser(userInstance)
 		fmt.Println(userInstance.ID)

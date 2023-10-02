@@ -57,6 +57,7 @@ func main() {
 	e.GET("/showCarts", usecase.GetCart)
 	e.POST("/addUsers", usecase.InsertUsers)
 	e.POST("/checkout", usecase.Checkout)
+	e.POST("/register", usecase.Register)
 	// /restricted/*
 	r.POST("/addCarts", usecase.InsertCart)
 	r.POST("/updateCarts", usecase.UpdateCart)

@@ -7,6 +7,8 @@ import (
 	"echojson/utils"
 	"fmt"
 	"strings"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 /*
@@ -72,13 +74,17 @@ func AddUser(users models.RequestUser, user int, tx *sql.Tx) (vals []interface{}
 	return
 }
 
-func Register(users models.RequestUser, user int, tx *sql.Tx) (vals []interface{}, err error) {
+func Register(users models.RequestUser, tx *sql.Tx) (vals []interface{}, err error) {
 
-	sqlStr := `INSERT INTO public.users(age, first_name, last_name, email, username, password) VALUES `
+	sqlStr := `INSERT INTO public.users(age, first_name, last_name, email, username, password, admin) VALUES `
 
 	for _, row := range users.Request { //index,name_of_
 		sqlStr += " (?, ?, ?, ?, ?, ?, ?),"
-		vals = append(vals, row.Age, row.First_name, row.Last_name, row.Email, row.Username, row.Password)
+		bpass, err := bcrypt.GenerateFromPassword([]byte(row.Password), 10)
+		if err != nil {
+			return nil, err
+		}
+		vals = append(vals, row.Age, row.First_name, row.Last_name, row.Email, row.Username, bpass, false)
 	}
 	// trim the last ,
 	sqlStr = strings.TrimSuffix(sqlStr, ",")

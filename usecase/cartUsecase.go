@@ -96,14 +96,15 @@ func Checkout(c echo.Context) error {
 		} else {
 			fmt.Println("if check passed")
 			err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
-				err = repository.TransactionHistoryInsert(cart, trxID, tx)
+				cartReq := models.PaymentMethodCart{
+					Cart:           cart,
+					Payment_method: cartScan.Payment_method,
+				}
+				err = repository.TransactionHistoryInsert(cartReq, trxID, tx)
 				if err != nil {
 					fmt.Println("Trx detail error: ")
 					fmt.Println(err)
 				}
-
-				fmt.Print("id of cart.product_id: ")
-				fmt.Println(cart.Product_id)
 				_, err = repository.DeleteCart(cart, user)
 				if err != nil {
 					return err
@@ -115,27 +116,17 @@ func Checkout(c echo.Context) error {
 				fmt.Print(cart.Product_id)
 				err = repository.UpdateProductsQuantity(qty-cart.Quantity, cart.Product_id) //set quantity as quantity (stock we acquired from db)
 				fmt.Println("Updated cart")
+
+				for _, cart := range carts {
+					err = repository.TransactionDetailInsert(cart, trxID, tx)
+					if err != nil {
+						fmt.Println("Trx detail error: ")
+						fmt.Println(err)
+					}
+				}
 				return nil // Return nil to indicate success
 			})
-
-			if err != nil {
-				fmt.Println("error in DBTransaction:")
-				fmt.Println(err)
-				// Handle the error appropriately
-			}
 		}
-
-		// Now that the loop has completed, insert the transaction history
-		err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
-			for _, cart := range carts {
-				err = repository.TransactionDetailInsert(cart, trxID, tx)
-				if err != nil {
-					fmt.Println("Trx detail error: ")
-					fmt.Println(err)
-				}
-			}
-			return nil // Return nil to indicate success
-		})
 
 		if err != nil {
 			fmt.Println("error in inserting transaction history:")

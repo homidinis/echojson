@@ -133,14 +133,14 @@ func TransactionDetailInsert(cart models.Cart, trx_id string, tx *sql.Tx) (err e
 	fmt.Println("TransactionDetailInsert ran")
 	return
 }
-func TransactionHistoryInsert(cart models.Cart, trx_id string, tx *sql.Tx) (err error) {
+func TransactionHistoryInsert(cart models.PaymentMethodCart, trx_id string, tx *sql.Tx) (err error) {
 	// trxID, err := utils.IncrementTrxID()
 	if err != nil {
 		fmt.Println("Transaction ID error")
 		return err
 	}
-	query3 := "INSERT INTO public.transaction_history(transaction_id,user_id) VALUES ($1,$2);"
-	_, err = tx.Exec(query3, trx_id, cart.User_id) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
+	query3 := "INSERT INTO public.transaction_history(transaction_id,user_id,payment_method) VALUES ($1,$2,$3);"
+	_, err = tx.Exec(query3, trx_id, cart.Cart.User_id, cart.Payment_method) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
 	if err != nil {
 		fmt.Println("error in trxhi queryrow:")
 		fmt.Println(err)

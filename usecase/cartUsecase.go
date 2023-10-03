@@ -13,6 +13,13 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+/*
+====================
+
+# CHECKOUT
+Get cart, increment trx id, then loop through every entry in the cart to insert them into TRX history and TRX detail
+=======================
+*/
 func Checkout(c echo.Context) error {
 	tokenStr, err := utils.ExtractToken(c)
 	if err != nil {
@@ -50,10 +57,26 @@ func Checkout(c echo.Context) error {
 
 	var qty int
 	carts, err := repository.GetCart(0, cartScan.User_id) //product id,user id
+	if len(carts) == 0 {
+		result := models.Response{
+			Message: "ERROR CART EMPTY",
+			Status:  "ERROR",
+			Result:  nil,
+			Errors:  errors.New("cart is empty"),
+		}
+		fmt.Println(result)
+		return c.JSON(http.StatusInternalServerError, result)
+	}
 	fmt.Println("carts:")
 	fmt.Println(carts)
+	var trxID string
+	if trxID, err = utils.IncrementTrxID(); err != nil {
+		fmt.Println("incrementing error in usecase line 57")
+		return err
+	}
 
 	for _, cart := range carts {
+		fmt.Println("carts ran!")
 		qty = repository.GetStock(cart.Product_id)
 		if err != nil {
 			fmt.Println("error in getstock:")
@@ -83,41 +106,65 @@ func Checkout(c echo.Context) error {
 		} else {
 			fmt.Println("if check passed")
 			err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
-				err = repository.TransactionDetailInsert(cart, tx)
+				cartReq := models.PaymentMethodCart{
+					Cart:           cart,
+					Payment_method: cartScan.Payment_method,
+				}
+				err = repository.TransactionHistoryInsert(cartReq, trxID, tx)
 				if err != nil {
+					fmt.Println("Trx detail error: ")
 					fmt.Println(err)
 				}
-				err = repository.TransactionHistoryInsert(cart, tx)
-				if err != nil {
-					fmt.Println(err)
-				}
-				fmt.Println("id:")
-				fmt.Println(cart.Product_id)
 				_, err = repository.DeleteCart(cart, user)
 				if err != nil {
 					return err
 				}
+
 				fmt.Println("cart delete:")
 				fmt.Println(cart)
 				fmt.Println("cart product id: ")
 				fmt.Print(cart.Product_id)
 				err = repository.UpdateProductsQuantity(qty-cart.Quantity, cart.Product_id) //set quantity as quantity (stock we acquired from db)
+				if err != nil {
+					return err
+				}
 				fmt.Println("Updated cart")
-				return err
+
+				for _, cart := range carts {
+					err = repository.TransactionDetailInsert(cart, trxID, tx)
+					if err != nil {
+						fmt.Println("Trx detail error: ")
+						fmt.Println(err)
+					}
+				}
+				return nil // Return nil to indicate success
 			})
-			return err
 		}
+
+		if err != nil {
+			fmt.Println("error in inserting transaction history:")
+			fmt.Println(err)
+			// Handle the error appropriately
+		}
+
+		result := models.Response{
+			Message: "SUCCESS",
+			Status:  "SUCCESS",
+			Result:  err,
+			Errors:  nil,
+		}
+		return c.JSON(http.StatusOK, result)
 	}
-	result := models.Response{
-		Message: "SUCCESS",
-		Status:  "SUCCESS",
-		Result:  err,
-		Errors:  nil,
-	}
-	return c.JSON(http.StatusOK, result)
-	//struct: {}
+	return err
 }
 
+/*
+====================
+
+# GETCART
+
+=======================
+*/
 func GetCart(c echo.Context) error {
 
 	tokenStr, err := utils.ExtractToken(c)
@@ -161,12 +208,19 @@ func GetCart(c echo.Context) error {
 		UserID:  user,
 		Message: "SUCCESS",
 		Status:  "SUCCESS",
-		Result:  nil,
+		Result:  result,
 		Errors:  nil,
 	}
 	return c.JSON(http.StatusOK, response)
 }
 
+/*
+====================
+
+# GETCART
+
+=======================
+*/
 func InsertCart(c echo.Context) error {
 	var cart models.RequestCart
 	tokenStr, err := utils.ExtractToken(c)
@@ -208,7 +262,13 @@ func InsertCart(c echo.Context) error {
 		} else if cartReq.Quantity > products.Quantity {
 			fmt.Println("quantity empty! err: ")
 			fmt.Print(err)
-			return c.JSON(http.StatusInternalServerError, errors.New("qty empty"))
+			result := models.Response{
+				Message: "ERROR IN GETPRODUCTS",
+				Status:  "error",
+				Result:  nil,
+				Errors:  "qty bigger than stock",
+			}
+			return c.JSON(http.StatusInternalServerError, result)
 		}
 	}
 	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
@@ -232,6 +292,14 @@ func InsertCart(c echo.Context) error {
 	})
 	return err
 }
+
+/*
+====================
+
+# UPDATE
+
+=======================
+*/
 func UpdateCart(c echo.Context) error {
 	tokenStr, err := utils.ExtractToken(c)
 	if err != nil {
@@ -285,6 +353,14 @@ func UpdateCart(c echo.Context) error {
 	})
 	return err
 }
+
+/*
+====================
+
+# DELETE
+
+=======================
+*/
 
 func DeleteCart(c echo.Context) error {
 	tokenStr, err := utils.ExtractToken(c)

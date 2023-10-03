@@ -1,8 +1,8 @@
-- db transaction: kalau misalnya sudah ke insert ke trx, update stock gagal, rollback (ga jadi insert ke dalam trx)
-
-- group by transaction number / user on trx history table (group according to who is logged in) data jwt dimasukkan ke dalam SELECT query
-
-- summary dashboard admin
-- pending transactions (fitur payment -- trx is pending sampai fungsi Payment dimasukin no. trx)
-
-FIX CART REPOSITORY
+- ganti expiry date jwt key
+- payment method
+STOCK 3000
+user A add to cart 3000
+user B add to cart 3000
+user A checkout
+user B SHOULD NOT be able to check out
+rewrite checkout

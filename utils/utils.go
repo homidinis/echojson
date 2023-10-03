@@ -48,7 +48,7 @@ func GenerateToken(user models.User, secret []byte) (string, error) {
 
 	claims := &models.JwtCustomClaims{ //need to put the struct in a common file exportable by main AND Products or it will complaim
 		UserID: user.ID,
-		Admin:  user.Admin,
+		Admin:  *user.Admin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
 		},
@@ -159,27 +159,29 @@ func BindValidateStruct(ctx echo.Context, i interface{}) error {
 	return nil
 }
 
-func IncrementTrxID() string {
-	db := db.Conn()
-	query := "SELECT transaction_id FROM transaction_history ORDER BY DESC LIMIT 1"
-	row := db.QueryRow(query)
-
+func IncrementTrxID() (string, error) {
 	var latestTransactionID string
-	if latestTransactionID == "" {
-		fmt.Println("Latest transaction_id is empty")
-		return "T001"
+	db := db.Conn()
+	query := "SELECT transaction_id FROM transaction_history ORDER BY transaction_id DESC LIMIT 1"
+	err := db.QueryRow(query).Scan(&latestTransactionID)
+	if err != nil && err != sql.ErrNoRows {
+		return "T001", nil
+		// if err is checked, it will stop and it won't return T001
 	}
 
-	err := row.Scan(&latestTransactionID)
+	if latestTransactionID == "" {
+		fmt.Println("Latest transaction_id is empty")
+		return "T001", nil
+	}
 
 	numericPart, err := strconv.Atoi(latestTransactionID[1:])
 	if err != nil {
 		fmt.Println("Error in parsing numeric part:", err)
-		return ""
+		return "", err
 	}
 	numericPart++
 
-	return fmt.Sprintf("T%03d", numericPart)
+	return fmt.Sprintf("T%03d", numericPart), err
 }
 
 func DBTransaction(db *sql.DB, txFunc func(*sql.Tx) error) (err error) {

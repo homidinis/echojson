@@ -21,7 +21,7 @@ type User struct {
 	Password   string `json:"password" validate:"required"`
 	Age        int    `json:"age" validate:"required,gte=0,lte=80"`
 	Last_name  string `json:"lastName" validate:"required"`
-	Admin      bool   `json:"isAdmin"  validate:"required"`
+	Admin      *bool  `json:"isAdmin" `
 	Email      string `json:"email" validate:"required,email"`
 }
 type RequestUser struct {

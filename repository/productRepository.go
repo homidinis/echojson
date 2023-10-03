@@ -21,7 +21,7 @@ func GetProducts(id int) (products []models.Item, err error) {
 	}
 	fmt.Println(query)
 	rows, err := db.Query(query, data...) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
-	fmt.Println("cek lagi di sini getproducts: ", err)
+	fmt.Println("err in getproducts?: ", err)
 
 	if err != nil {
 		fmt.Println("error in repo get products", err.Error())
@@ -45,7 +45,7 @@ func GetProductsV2(id int) (products models.Item, err error) {
 	query := "SELECT name, description, price, product_id, quantity FROM products WHERE product_id=$1"
 	fmt.Println(query)
 	err = db.QueryRow(query, id).Scan(&products.Name, &products.Description, &products.Price, &products.Product_id, &products.Quantity) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
-	fmt.Println("cek lagi di sini getproductsv2: ", err)
+	fmt.Println("err in getproductsv2?: ", err)
 
 	if err != nil {
 		fmt.Println("error in repo get products", err.Error())
@@ -117,10 +117,11 @@ func UpdateProductsQuantity(qty int, product_id int) (err error) {
 	db := db.Conn()
 
 	query := "UPDATE public.products SET quantity=$1 WHERE product_id=$2"
-	err = db.QueryRow(query, qty, product_id)
+	_, err = db.Exec(query, qty, product_id)
 	if err != nil {
-		fmt.Println("update products quantity error:")
-		return err
+		fmt.Println("update products quantity error: ")
+		fmt.Println(err.Error())
+		return
 	}
 	return
 }
@@ -142,7 +143,7 @@ func DeleteProducts(itemContainer models.Item, user int, tx *sql.Tx) (product_id
 	var items models.Item
 	err = tx.QueryRow(query, &itemContainer.Product_id).Scan(&items.Product_id)
 	if err != nil {
-		fmt.Println("Exec Error in controller:", err)
+		fmt.Println("Deleteproducts Error in controller:", err)
 		return
 	}
 

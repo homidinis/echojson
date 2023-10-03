@@ -198,3 +198,9 @@ func DeleteCart(cartContainer models.Cart, user int) (cart_id string, err error)
 
 	return
 }
+
+// 1. loop:
+// 2. insert into transaction detail (LOOP THROUGH CARTS AGAIN)
+//stop loop
+// 3. insert into transaction history (separate from processcart?)
+// 4. delete cart content

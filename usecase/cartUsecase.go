@@ -106,7 +106,7 @@ func Checkout(c echo.Context) error {
 		} else {
 			fmt.Println("if check passed")
 			err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
-				cartReq := models.PaymentMethodCart{
+				cartReq := models.PaymentMethodCart{ //separate this into its own function (process cart)
 					Cart:           cart,
 					Payment_method: cartScan.Payment_method,
 				}

@@ -6,6 +6,7 @@ import (
 	"echojson/models"
 	"echojson/repository"
 	"echojson/utils"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -20,30 +21,30 @@ Get cart, increment trx id, then loop through every entry in the cart to insert 
 =======================
 */
 func Checkout(c echo.Context) error {
-	// tokenStr, err := utils.ExtractToken(c)
-	// if err != nil {
-	// 	response := models.Response{
-	// 		Message: "ExtractToken MISSING TOKEN!",
-	// 		Status:  "ERROR",
-	// 		Result:  nil,
-	// 		Errors:  err.Error(),
-	// 	}
-	// 	return c.JSON(http.StatusInternalServerError, response)
-	// }
+	tokenStr, err := utils.ExtractToken(c)
+	if err != nil {
+		response := models.Response{
+			Message: "ExtractToken MISSING TOKEN!",
+			Status:  "ERROR",
+			Result:  nil,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, response)
+	}
 
-	// user, _, err := utils.ExtractAccessClaims(tokenStr)
-	// if err != nil {
-	// 	result := models.Response{
-	// 		Message: "error in extractaccessclaims",
-	// 		Status:  "ERROR",
-	// 		Result:  nil,
-	// 		Errors:  err.Error(),
-	// 	}
-	// 	return c.JSON(http.StatusInternalServerError, result)
-	// }
+	user, _, err := utils.ExtractAccessClaims(tokenStr)
+	if err != nil {
+		result := models.Response{
+			Message: "error in extractaccessclaims",
+			Status:  "ERROR",
+			Result:  nil,
+			Errors:  err.Error(),
+		}
+		return c.JSON(http.StatusInternalServerError, result)
+	}
 
 	var cartScan models.UserID
-	err := utils.BindValidateStruct(c, &cartScan)
+	err = utils.BindValidateStruct(c, &cartScan)
 	if err != nil {
 		result := models.Response{
 			Message: "ERROR IN BIND VALIDATE STRUCT",
@@ -54,17 +55,20 @@ func Checkout(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, result)
 	}
 
+	var qty int
 	carts, err := repository.GetCart(0, cartScan.User_id) //product id,user id
 	if len(carts) == 0 {
 		result := models.Response{
 			Message: "ERROR CART EMPTY",
 			Status:  "ERROR",
 			Result:  nil,
-			Errors:  "cart is empty",
+			Errors:  errors.New("cart is empty"),
 		}
+		fmt.Println(result)
 		return c.JSON(http.StatusInternalServerError, result)
 	}
-
+	fmt.Println("carts:")
+	fmt.Println(carts)
 	var trxID string
 	if trxID, err = utils.IncrementTrxID(); err != nil {
 		fmt.Println("incrementing error in usecase line 57")
@@ -72,56 +76,85 @@ func Checkout(c echo.Context) error {
 	}
 
 	for _, cart := range carts {
-		qty := repository.GetStock(cart.Product_id)
-
-		if qty-cart.Quantity < 0 {
-			fmt.Println("quantity bigger than stock")
+		fmt.Println("carts ran!")
+		qty = repository.GetStock(cart.Product_id)
+		if err != nil {
+			fmt.Println("error in getstock:")
+			fmt.Println(cart.Product_id)
 			return err
+		}
+		fmt.Println("Stock acquired:")
+		fmt.Println(qty)
+		if cart.Quantity > qty {
+			result := models.Response{
+				Message: "ERROR QTY EXCEEDS STOCK",
+				Status:  "ERROR",
+				Result:  nil,
+				Errors:  errors.New("qty exceeds stock"),
+			}
+			fmt.Println(result)
+			return c.JSON(http.StatusInternalServerError, result)
+		} else if qty == 0 {
+			fmt.Println("quantity 0")
+			result := models.Response{
+				Message: "ERROR QTY EMPTY",
+				Status:  "ERROR",
+				Result:  nil,
+				Errors:  errors.New("qty empty"),
+			}
+			return c.JSON(http.StatusInternalServerError, result)
 		} else {
+			fmt.Println("if check passed")
 			err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
-<<<<<<< HEAD
-				cartReq := models.PaymentMethodCart{ //separate this into its own function (process cart)
+				cartReq := models.PaymentMethodCart{
 					Cart:           cart,
 					Payment_method: cartScan.Payment_method,
 				}
 				err = repository.TransactionHistoryInsert(cartReq, trxID, tx)
-=======
-				err = repository.TransactionDetailInsert(cart, trxID, tx)
->>>>>>> f8d3a2cd046eb17d2f021dc1cdabd26781c4c4b5
 				if err != nil {
-					fmt.Println("error in inserting transaction detail:")
+					fmt.Println("Trx detail error: ")
 					fmt.Println(err)
 				}
+				_, err = repository.DeleteCart(cart, user)
+				if err != nil {
+					return err
+				}
 
-				return err
-			})
+				fmt.Println("cart delete:")
+				fmt.Println(cart)
+				fmt.Println("cart product id: ")
+				fmt.Print(cart.Product_id)
+				err = repository.UpdateProductsQuantity(qty-cart.Quantity, cart.Product_id) //set quantity as quantity (stock we acquired from db)
+				if err != nil {
+					return err
+				}
+				fmt.Println("Updated cart")
 
-			result := models.Response{
-				Message: "SUCCESS",
-				Status:  "SUCCESS",
-				Result:  err,
-				Errors:  nil,
-			}
-			return c.JSON(http.StatusOK, result)
-			for _, cart := range carts {
-				err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
-					fmt.Println("trx history inserted!")
-					pmcart := models.PaymentMethodCart{
-						Cart:           cart,
-						Payment_method: cartScan.Payment_method,
-					}
-					err = repository.TransactionHistoryInsert(pmcart, trxID, tx)
+				for _, cart := range carts {
+					err = repository.TransactionDetailInsert(cart, trxID, tx)
 					if err != nil {
-						return err
+						fmt.Println("Trx detail error: ")
+						fmt.Println(err)
 					}
-					return
-				})
-			}
-
+				}
+				return nil // Return nil to indicate success
+			})
 		}
 
-	}
+		if err != nil {
+			fmt.Println("error in inserting transaction history:")
+			fmt.Println(err)
+			// Handle the error appropriately
+		}
 
+		result := models.Response{
+			Message: "SUCCESS",
+			Status:  "SUCCESS",
+			Result:  err,
+			Errors:  nil,
+		}
+		return c.JSON(http.StatusOK, result)
+	}
 	return err
 }
 

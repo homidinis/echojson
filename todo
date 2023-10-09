@@ -1,9 +1,1 @@
-- ganti expiry date jwt key
-- payment method
-STOCK 3000
-user A add to cart 3000
-user B add to cart 3000
-user A checkout
-user B SHOULD NOT be able to check out
-rewrite checkout
-DONE!!!!
+payment method should only be inserted as a code that refers to the payment_method table

@@ -76,7 +76,6 @@ func Checkout(c echo.Context) error {
 	}
 
 	for _, cart := range carts {
-		fmt.Println("carts ran!")
 		qty = repository.GetStock(cart.Product_id)
 		if err != nil {
 			fmt.Println("error in getstock:")
@@ -104,47 +103,48 @@ func Checkout(c echo.Context) error {
 			}
 			return c.JSON(http.StatusInternalServerError, result)
 		} else {
-			fmt.Println("if check passed")
-			err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
-				cartReq := models.PaymentMethodCart{
-					Cart:           cart,
-					Payment_method: cartScan.Payment_method,
-				}
-				err = repository.TransactionHistoryInsert(cartReq, trxID, tx)
-				if err != nil {
-					fmt.Println("Trx detail error: ")
-					fmt.Println(err)
-				}
-				_, err = repository.DeleteCart(cart, user)
-				if err != nil {
-					return err
-				}
-
-				fmt.Println("cart delete:")
-				fmt.Println(cart)
-				fmt.Println("cart product id: ")
-				fmt.Print(cart.Product_id)
-				err = repository.UpdateProductsQuantity(qty-cart.Quantity, cart.Product_id) //set quantity as quantity (stock we acquired from db)
-				if err != nil {
-					return err
-				}
-				fmt.Println("Updated cart")
-
-				for _, cart := range carts {
-					err = repository.TransactionDetailInsert(cart, trxID, tx)
+			for _, cart := range carts {
+				err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+					cartReq := models.PaymentMethodCart{
+						Cart:           cart,
+						Payment_method: cartScan.Payment_method,
+					}
+					err = repository.TransactionHistoryInsert(cartReq, trxID, tx)
 					if err != nil {
 						fmt.Println("Trx detail error: ")
 						fmt.Println(err)
 					}
-				}
-				return nil // Return nil to indicate success
-			})
-		}
+					_, err = repository.DeleteCart(cart, user)
+					if err != nil {
+						return err
+					}
 
-		if err != nil {
-			fmt.Println("error in inserting transaction history:")
-			fmt.Println(err)
-			// Handle the error appropriately
+					fmt.Println("cart delete:")
+					fmt.Println(cart)
+					fmt.Println("cart product id: ")
+					fmt.Print(cart.Product_id)
+					err = repository.UpdateProductsQuantity(qty-cart.Quantity, cart.Product_id) //set quantity as quantity (stock we acquired from db)
+					if err != nil {
+						return err
+					}
+					fmt.Println("Updated cart")
+
+					for _, cart := range carts {
+						err = repository.TransactionDetailInsert(cart, trxID, tx)
+						if err != nil {
+							fmt.Println("Trx detail error: ")
+							fmt.Println(err)
+						}
+					}
+					return nil // Return nil to indicate success
+				})
+			}
+
+			if err != nil {
+				fmt.Println("error in inserting transaction history:")
+				fmt.Println(err)
+				// Handle the error appropriately
+			}
 		}
 
 		result := models.Response{

@@ -184,13 +184,13 @@ func DeleteCart(cartContainer models.Cart, user int) (cart_id string, err error)
 
 	db := db.Conn()
 
-	statement, err := db.Prepare(`DELETE FROM cart WHERE product_id=$1 RETURNING id;`)
+	statement, err := db.Prepare(`DELETE FROM cart WHERE product_id=$1 AND user_id = $2 RETURNING id;`)
 	if err != nil {
 		fmt.Println("Prep Error in controller:", err)
 		return
 	}
 	var items models.Item
-	err = statement.QueryRow(&cartContainer.Product_id).Scan(&items.Product_id)
+	err = statement.QueryRow(&cartContainer.Product_id, &cartContainer.User_id).Scan(&items.Product_id)
 	if err != nil {
 		fmt.Println("Delete Error in controller:", err)
 		return

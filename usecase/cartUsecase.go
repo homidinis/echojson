@@ -57,6 +57,9 @@ func Checkout(c echo.Context) error {
 
 	var qty int
 	carts, err := repository.GetCart(0, cartScan.User_id) //product id,user id
+	if err != nil {
+		return err
+	}
 	if len(carts) == 0 {
 		result := models.Response{
 			Message: "ERROR CART EMPTY",
@@ -67,86 +70,110 @@ func Checkout(c echo.Context) error {
 		fmt.Println(result)
 		return c.JSON(http.StatusInternalServerError, result)
 	}
-	fmt.Println("carts:")
-	fmt.Println(carts)
 
 	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
 		// Generate a new transaction ID
 		var trxID string
 		if trxID, err = utils.IncrementTrxID(); err != nil {
-			fmt.Println("incrementing error in usecase line 57")
+			fmt.Println("incrementing error in usecase line 77")
 			return err
 		}
-
 		// Insert once into Transaction History before the loop
 		cartReq := models.PaymentMethodCart{
 			Cart:           carts[0], // Just use the first cart item to create the history record
 			Payment_method: cartScan.Payment_method,
 		}
-		err = repository.TransactionHistoryInsert(cartReq, trxID, tx)
+		qty = repository.GetStock(cartReq.Cart.Product_id)
 		if err != nil {
-			fmt.Println("Trx history error: ")
-			fmt.Println(err)
+			fmt.Println("error in getstock:")
+			fmt.Println(cartReq.Cart.Product_id)
 			return err
 		}
+		fmt.Println("Stock acquired:")
+		fmt.Println(qty)
 
-		// Loop over all items in the user's cart
-		for _, cart := range carts {
-			qty = repository.GetStock(cart.Product_id)
+		if cartReq.Cart.Quantity > qty {
+			result := models.Response{
+				Message: "ERROR QTY EXCEEDS STOCK",
+				Status:  "ERROR",
+				Result:  nil,
+				Errors:  errors.New("qty exceeds stock"),
+			}
+			fmt.Println(result)
+			return c.JSON(http.StatusInternalServerError, result)
+		} else {
+			fmt.Println("Quantity OK")
+			err = repository.TransactionHistoryInsert(cartReq, trxID, tx) // takes carts and Payment Method
 			if err != nil {
-				fmt.Println("error in getstock:")
-				fmt.Println(cart.Product_id)
+				fmt.Println("Trx history error: ")
+				fmt.Println(err)
 				return err
 			}
-			fmt.Println("Stock acquired:")
-			fmt.Println(qty)
-
-			if cart.Quantity > qty {
-				result := models.Response{
-					Message: "ERROR QTY EXCEEDS STOCK",
-					Status:  "ERROR",
-					Result:  nil,
-					Errors:  errors.New("qty exceeds stock"),
-				}
-				fmt.Println(result)
-				return c.JSON(http.StatusInternalServerError, result)
-			} else if qty == 0 {
-				fmt.Println("quantity 0")
-				result := models.Response{
-					Message: "ERROR QTY EMPTY",
-					Status:  "ERROR",
-					Result:  nil,
-					Errors:  errors.New("qty empty"),
-				}
-				return c.JSON(http.StatusInternalServerError, result)
-			} else {
-				fmt.Println("if check passed")
-
-				// Insert into Transaction Detail for each cart item
-				err = repository.TransactionDetailInsert(cart, trxID, tx)
+			// Loop over all items in the user's cart
+			for _, cart := range carts {
+				qty = repository.GetStock(cart.Product_id)
 				if err != nil {
-					fmt.Println("Trx detail error: ")
-					fmt.Println(err)
+					fmt.Println("error in getstock:")
+					fmt.Println(cart.Product_id)
 					return err
 				}
+				fmt.Println("Stock acquired:")
+				fmt.Println(qty)
 
-				_, err = repository.DeleteCart(cart, user)
-				if err != nil {
-					return err
-				}
+				if cart.Quantity > qty {
+					result := models.Response{
+						Message: "ERROR QTY EXCEEDS STOCK",
+						Status:  "ERROR",
+						Result:  nil,
+						Errors:  errors.New("qty exceeds stock"),
+					}
+					fmt.Println(result)
+					return c.JSON(http.StatusInternalServerError, result)
+				} else if qty == 0 {
+					fmt.Println("quantity 0")
+					result := models.Response{
+						Message: "ERROR QTY EMPTY",
+						Status:  "ERROR",
+						Result:  nil,
+						Errors:  errors.New("qty empty"),
+					}
+					return c.JSON(http.StatusInternalServerError, result)
+				} else {
+					fmt.Println("if check passed")
 
-				fmt.Println("cart delete:")
-				fmt.Println(cart)
-				fmt.Println("cart product id: ")
-				fmt.Print(cart.Product_id)
-				err = repository.UpdateProductsQuantity(qty-cart.Quantity, cart.Product_id) //set quantity as quantity (stock we acquired from db)
-				if err != nil {
-					return err
+					// Insert into Transaction Detail for each cart item. Insert -> delete -> update qty -> insert -> delete -> update qty
+					err = repository.TransactionDetailInsert(cart, trxID, tx)
+					if err != nil {
+						fmt.Println("Trx detail error: ")
+						fmt.Println(err)
+						return err
+					}
+
+					_, err = repository.DeleteCart(cart, user)
+					if err != nil {
+						return err
+					}
+
+					fmt.Println("cart delete:")
+					fmt.Println(cart)
+					fmt.Println("cart product id: ")
+					fmt.Print(cart.Product_id)
+					err = repository.UpdateProductsQuantity(qty-cart.Quantity, cart.Product_id) //set quantity as quantity (stock we acquired from db)
+					if err != nil {
+						return err
+					}
+					fmt.Println("Updated cart")
 				}
-				fmt.Println("Updated cart")
 			}
 		}
-		return nil // Return nil to indicate success
+
+		result := models.Response{
+			Message: "SUCCESS",
+			Status:  "SUCCESS",
+			Result:  err,
+			Errors:  nil,
+		}
+		return c.JSON(http.StatusOK, result) // Return nil to indicate success
 	})
 
 	if err != nil {
@@ -154,14 +181,7 @@ func Checkout(c echo.Context) error {
 		fmt.Println(err)
 		// Handle the error appropriately
 	}
-
-	result := models.Response{
-		Message: "SUCCESS",
-		Status:  "SUCCESS",
-		Result:  err,
-		Errors:  nil,
-	}
-	return c.JSON(http.StatusOK, result)
+	return nil
 }
 
 /*

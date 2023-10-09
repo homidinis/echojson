@@ -191,7 +191,11 @@ func UpdateProducts(c echo.Context) error {
 /*===============================
 
 DELETE
-
+	var trxID string
+	if trxID, err = utils.IncrementTrxID(); err != nil {
+		fmt.Println("incrementing error in usecase line 57")
+		return err
+	}
 =================================*/
 
 func DeleteProducts(c echo.Context) error { //wrapper for DeleteProducts

@@ -2,7 +2,7 @@ package repository
 
 import (
 	"database/sql"
-	"echojson/db"
+	"echojson/config"
 	"echojson/models"
 	"echojson/utils"
 	"fmt"
@@ -10,7 +10,7 @@ import (
 )
 
 func GetProducts(id int) (products []models.Item, err error) {
-	db := db.Conn()
+	db := config.Conn()
 
 	var data []interface{}
 	query := "SELECT name, description, price, product_id, quantity FROM products"
@@ -40,7 +40,7 @@ func GetProducts(id int) (products []models.Item, err error) {
 }
 
 func GetProductsV2(id int) (products models.Item, err error) {
-	db := db.Conn()
+	db := config.Conn()
 
 	query := "SELECT name, description, price, product_id, quantity FROM products WHERE product_id=$1"
 	fmt.Println(query)
@@ -114,7 +114,7 @@ func UpdateProducts(itemContainer models.Item, user int, tx *sql.Tx) (updated_id
 }
 
 func UpdateProductsQuantity(qty int, product_id int) (err error) {
-	db := db.Conn()
+	db := config.Conn()
 
 	query := "UPDATE public.products SET quantity=$1 WHERE product_id=$2"
 	_, err = db.Exec(query, qty, product_id)

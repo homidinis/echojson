@@ -2,7 +2,7 @@ package repository
 
 import (
 	"database/sql"
-	"echojson/db"
+	"echojson/config"
 	"echojson/models"
 	"echojson/utils"
 	"errors"
@@ -18,7 +18,7 @@ GET TRANSACTION (SELECT)
 ==================================
 */
 func GetTransaction(id string, userid int) (transactions []models.Transaction, err error) {
-	db := db.Conn()
+	db := config.Conn()
 
 	if db == nil {
 		return nil, errors.New("database connection is nil")

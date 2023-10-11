@@ -2,7 +2,7 @@ package usecase
 
 import (
 	"database/sql"
-	"echojson/db"
+	"echojson/config"
 	"echojson/models"
 	"echojson/repository"
 	"echojson/utils"
@@ -80,7 +80,7 @@ func InsertUsers(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+	err = utils.DBTransaction(config.Conn(), func(tx *sql.Tx) (err error) {
 		result, err := repository.AddUser(*users, user, tx)
 		if err != nil {
 			response := models.Response{
@@ -122,7 +122,7 @@ func Register(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+	err = utils.DBTransaction(config.Conn(), func(tx *sql.Tx) (err error) {
 		result, err := repository.Register(*users, tx)
 		if err != nil {
 			response := models.Response{
@@ -191,7 +191,7 @@ func UpdateUsers(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+	err = utils.DBTransaction(config.Conn(), func(tx *sql.Tx) (err error) {
 		result, err := repository.UpdateUser(userContainer, user, tx)
 		if err != nil {
 			fmt.Println("Exec Error:", err)
@@ -252,7 +252,7 @@ func DeleteUsers(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+	err = utils.DBTransaction(config.Conn(), func(tx *sql.Tx) (err error) {
 		result, err := repository.DeleteUser(userContainer, user, tx)
 		if err != nil {
 			response := models.Response{

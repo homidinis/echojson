@@ -2,7 +2,7 @@ package usecase
 
 import (
 	"database/sql"
-	"echojson/db"
+	"echojson/config"
 	"echojson/models"
 	"echojson/repository"
 	"echojson/utils"
@@ -92,7 +92,7 @@ func InsertProducts(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, response)
 	}
 	//result is when we pass items into AddProducts
-	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+	err = utils.DBTransaction(config.Conn(), func(tx *sql.Tx) (err error) {
 		result, err := repository.AddProducts(items, tx)
 		if err != nil {
 			response := models.Response{
@@ -163,7 +163,7 @@ func UpdateProducts(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+	err = utils.DBTransaction(config.Conn(), func(tx *sql.Tx) (err error) {
 		result, err := repository.UpdateProducts(itemContainer, user, tx)
 		if err != nil {
 			response := models.Response{
@@ -191,7 +191,11 @@ func UpdateProducts(c echo.Context) error {
 /*===============================
 
 DELETE
-
+	var trxID string
+	if trxID, err = utils.IncrementTrxID(); err != nil {
+		fmt.Println("incrementing error in usecase line 57")
+		return err
+	}
 =================================*/
 
 func DeleteProducts(c echo.Context) error { //wrapper for DeleteProducts
@@ -236,7 +240,7 @@ func DeleteProducts(c echo.Context) error { //wrapper for DeleteProducts
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+	err = utils.DBTransaction(config.Conn(), func(tx *sql.Tx) (err error) {
 		result, err := repository.DeleteProducts(itemContainer, user, tx)
 		if err != nil {
 			response := models.Response{

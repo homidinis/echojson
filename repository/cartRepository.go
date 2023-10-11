@@ -2,7 +2,7 @@ package repository
 
 import (
 	"database/sql"
-	"echojson/db"
+	"echojson/config"
 	"echojson/models"
 	"echojson/utils"
 	"errors"
@@ -11,7 +11,7 @@ import (
 )
 
 func GetCart(id int, userid int) (cartArray []models.Cart, err error) {
-	db := db.Conn()
+	db := config.Conn()
 
 	if db == nil {
 		return nil, errors.New("database connection is nil")
@@ -52,7 +52,7 @@ func GetCart(id int, userid int) (cartArray []models.Cart, err error) {
 ========================================
 */
 func GetStock(id int) (amount int) {
-	db := db.Conn()
+	db := config.Conn()
 	query := "SELECT quantity FROM products WHERE product_id=$1"
 	err := db.QueryRow(query, id).Scan(&amount) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
 	if err != nil {
@@ -182,15 +182,15 @@ func UpdateCart(cartContainer models.Cart, user int, tx *sql.Tx) (updated_id int
 */
 func DeleteCart(cartContainer models.Cart, user int) (cart_id string, err error) {
 
-	db := db.Conn()
+	db := config.Conn()
 
-	statement, err := db.Prepare(`DELETE FROM cart WHERE product_id=$1 RETURNING id;`)
+	statement, err := db.Prepare(`DELETE FROM cart WHERE product_id=$1 AND user_id = $2 RETURNING id;`)
 	if err != nil {
 		fmt.Println("Prep Error in controller:", err)
 		return
 	}
 	var items models.Item
-	err = statement.QueryRow(&cartContainer.Product_id).Scan(&items.Product_id)
+	err = statement.QueryRow(&cartContainer.Product_id, &cartContainer.User_id).Scan(&items.Product_id)
 	if err != nil {
 		fmt.Println("Delete Error in controller:", err)
 		return
@@ -198,3 +198,9 @@ func DeleteCart(cartContainer models.Cart, user int) (cart_id string, err error)
 
 	return
 }
+
+// 1. loop:
+// 2. insert into transaction detail (LOOP THROUGH CARTS AGAIN)
+//stop loop
+// 3. insert into transaction history (separate from processcart?)
+// 4. delete cart content

@@ -3,4 +3,7 @@ payment method should only be inserted as a code that refers to the payment_meth
 - when cart exceeds stock, why is it inserted to transaction history?
 - product 2, produk 1 di cart lebih dari produk stock
 yang 1 masih kurang, 2 ngga kurang
-pas checkout, gimana? harusnya gagal
+pas checkout, gimana? harusnya 
+
+
+SESUAIKAN DENGAN A2P

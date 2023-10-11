@@ -2,7 +2,7 @@ package utils
 
 import (
 	"database/sql"
-	"echojson/db"
+	"echojson/config"
 	"echojson/models"
 	"errors"
 	"fmt"
@@ -161,7 +161,7 @@ func BindValidateStruct(ctx echo.Context, i interface{}) error {
 
 func IncrementTrxID() (string, error) {
 	var latestTransactionID string
-	db := db.Conn()
+	db := config.Conn()
 	query := "SELECT transaction_id FROM transaction_history ORDER BY transaction_id DESC LIMIT 1"
 	err := db.QueryRow(query).Scan(&latestTransactionID)
 	if err != nil && err != sql.ErrNoRows {

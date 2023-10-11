@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"echojson/db"
+	"echojson/config"
 	"echojson/models"
 	"fmt"
 )
@@ -14,7 +14,7 @@ import (
 ==================================
 */
 func GetLogin(username string) (containerArray []models.User, err error) { //declare as array of User struct
-	db := db.Conn()
+	db := config.Conn()
 	//1. grabs username and password WHERE typed-username
 	//2. dumps username, password, firstname from database into container
 	//3. compare password in container to typed-password

@@ -2,7 +2,7 @@ package usecase
 
 import (
 	"database/sql"
-	"echojson/db"
+	"echojson/config"
 	"echojson/models"
 	"echojson/repository"
 	"echojson/utils"
@@ -95,7 +95,7 @@ func InsertTransactions(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+	err = utils.DBTransaction(config.Conn(), func(tx *sql.Tx) (err error) {
 		result, err := repository.AddTransaction(transactions, user, tx)
 		if err != nil {
 			response := models.Response{
@@ -151,7 +151,7 @@ func DeleteTransactions(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+	err = utils.DBTransaction(config.Conn(), func(tx *sql.Tx) (err error) {
 		result, err := repository.DeleteTransaction(transactions, user, tx)
 		if err != nil {
 			response := models.Response{

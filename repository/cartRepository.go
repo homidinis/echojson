@@ -2,7 +2,7 @@ package repository
 
 import (
 	"database/sql"
-	"echojson/db"
+	"echojson/config"
 	"echojson/models"
 	"echojson/utils"
 	"errors"
@@ -11,7 +11,7 @@ import (
 )
 
 func GetCart(id int, userid int) (cartArray []models.Cart, err error) {
-	db := db.Conn()
+	db := config.Conn()
 
 	if db == nil {
 		return nil, errors.New("database connection is nil")
@@ -52,7 +52,7 @@ func GetCart(id int, userid int) (cartArray []models.Cart, err error) {
 ========================================
 */
 func GetStock(id int) (amount int) {
-	db := db.Conn()
+	db := config.Conn()
 	query := "SELECT quantity FROM products WHERE product_id=$1"
 	err := db.QueryRow(query, id).Scan(&amount) //append data (lots of them, potentially; ... is to pass multiple values, like an array)
 	if err != nil {
@@ -182,7 +182,7 @@ func UpdateCart(cartContainer models.Cart, user int, tx *sql.Tx) (updated_id int
 */
 func DeleteCart(cartContainer models.Cart, user int) (cart_id string, err error) {
 
-	db := db.Conn()
+	db := config.Conn()
 
 	statement, err := db.Prepare(`DELETE FROM cart WHERE product_id=$1 AND user_id = $2 RETURNING id;`)
 	if err != nil {

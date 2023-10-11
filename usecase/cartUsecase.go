@@ -2,7 +2,7 @@ package usecase
 
 import (
 	"database/sql"
-	"echojson/db"
+	"echojson/config"
 	"echojson/models"
 	"echojson/repository"
 	"echojson/utils"
@@ -71,7 +71,7 @@ func Checkout(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, result)
 	}
 
-	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+	err = utils.DBTransaction(config.Conn(), func(tx *sql.Tx) (err error) {
 		// Generate a new transaction ID
 		var trxID string
 		if trxID, err = utils.IncrementTrxID(); err != nil {
@@ -297,7 +297,7 @@ func InsertCart(c echo.Context) error {
 			return c.JSON(http.StatusInternalServerError, result)
 		}
 	}
-	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+	err = utils.DBTransaction(config.Conn(), func(tx *sql.Tx) (err error) {
 		result, err := repository.AddCart(cart, user, tx)
 		if err != nil {
 			response := models.Response{
@@ -358,7 +358,7 @@ func UpdateCart(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, response)
 	}
-	err = utils.DBTransaction(db.Conn(), func(tx *sql.Tx) (err error) {
+	err = utils.DBTransaction(config.Conn(), func(tx *sql.Tx) (err error) {
 		result, err := repository.UpdateCart(cartContainer, user, tx)
 		if err != nil {
 			response := models.Response{

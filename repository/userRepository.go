@@ -2,7 +2,7 @@ package repository
 
 import (
 	"database/sql"
-	"echojson/db"
+	"echojson/config"
 	"echojson/models"
 	"echojson/utils"
 	"fmt"
@@ -19,7 +19,7 @@ todo: add "if id=0"
 ==================================
 */
 func GetUser(id int) (userContainer []models.User) { //return userContainer, yang map ke response di usecase
-	db := db.Conn()
+	db := config.Conn()
 	query := `SELECT id, age, first_name, last_name, email, username, groups FROM public.users`
 	var data []interface{}
 
